@@ -1,0 +1,21 @@
+{
+  "name": "my-peaque-app",
+  "version": "0.1.0",
+  "description": "A Peaque Framework application",
+  "license": "MIT",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "dev": "peaque dev",
+    "build": "peaque build",
+    "start": "peaque start"
+  },
+  "devDependencies": {
+    "@peaque/framework": "^2.3.0",
+    "@types/react": "^19.0.38",
+    "@types/react-dom": "^19.0.11",
+    "tsx": "^4.7.0",
+    "typescript": "^5.9.2"
+  }
+}

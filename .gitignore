@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+*.log
+.vscode
+tsconfig.tsbuildinfo
+.local
+_experiments

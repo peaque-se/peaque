@@ -1,0 +1,31 @@
+# Source files
+src/
+*.ts
+!*.d.ts
+
+# Build config
+tsconfig.json
+tsconfig.*.json
+jest.config.js
+
+# Tests
+test/
+*.test.js
+*.spec.js
+*.test.ts
+*.spec.ts
+__tests__/
+
+# Development
+.vscode/
+.idea/
+*.log
+npm-debug.log*
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Build artifacts
+*.tsbuildinfo
