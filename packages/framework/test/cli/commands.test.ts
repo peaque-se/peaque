@@ -128,7 +128,8 @@ describe('CLI Command Parsing', () => {
         basePath: process.cwd(),
         output: path.join(process.cwd(), 'dist'),
         minify: true,
-        analyze: false
+        analyze: false,
+        noAssetRewrite: false
       })
     })
 
@@ -140,7 +141,8 @@ describe('CLI Command Parsing', () => {
         basePath: process.cwd(),
         output: '/custom/output',
         minify: true,
-        analyze: false
+        analyze: false,
+        noAssetRewrite: false
       })
     })
 
@@ -152,7 +154,8 @@ describe('CLI Command Parsing', () => {
         basePath: process.cwd(),
         output: '/custom/output',
         minify: true,
-        analyze: false
+        analyze: false,
+        noAssetRewrite: false
       })
     })
 
@@ -164,7 +167,8 @@ describe('CLI Command Parsing', () => {
         basePath: '/custom/path',
         output: path.join('/custom/path', 'dist'),
         minify: true,
-        analyze: false
+        analyze: false,
+        noAssetRewrite: false
       })
     })
 
@@ -176,7 +180,8 @@ describe('CLI Command Parsing', () => {
         basePath: '/custom/path',
         output: path.join('/custom/path', 'dist'),
         minify: true,
-        analyze: false
+        analyze: false,
+        noAssetRewrite: false
       })
     })
 
@@ -188,7 +193,8 @@ describe('CLI Command Parsing', () => {
         basePath: process.cwd(),
         output: path.join(process.cwd(), 'dist'),
         minify: false,
-        analyze: false
+        analyze: false,
+        noAssetRewrite: false
       })
     })
 
@@ -200,7 +206,8 @@ describe('CLI Command Parsing', () => {
         basePath: '/path',
         output: '/output',
         minify: false,
-        analyze: false
+        analyze: false,
+        noAssetRewrite: false
       })
     })
 
@@ -212,7 +219,8 @@ describe('CLI Command Parsing', () => {
         basePath: process.cwd(),
         output: path.join(process.cwd(), 'dist'),
         minify: true,
-        analyze: true
+        analyze: true,
+        noAssetRewrite: false
       })
     })
 
@@ -224,7 +232,34 @@ describe('CLI Command Parsing', () => {
         basePath: '/path',
         output: '/output',
         minify: false,
-        analyze: true
+        analyze: true,
+        noAssetRewrite: false
+      })
+    })
+
+    it('should parse "peaque build --no-asset-rewrite" with asset rewriting disabled', () => {
+      const program = createCommandLineParser(mockDevCommand, mockBuildCommand, mockStartCommand)
+      program.parse(['node', 'peaque', 'build', '--no-asset-rewrite'])
+
+      expect(mockBuildCommand).toHaveBeenCalledWith({
+        basePath: process.cwd(),
+        output: path.join(process.cwd(), 'dist'),
+        minify: true,
+        analyze: false,
+        noAssetRewrite: true
+      })
+    })
+
+    it('should parse "peaque build -b /path -o /output --no-minify --analyze --no-asset-rewrite" with all options', () => {
+      const program = createCommandLineParser(mockDevCommand, mockBuildCommand, mockStartCommand)
+      program.parse(['node', 'peaque', 'build', '-b', '/path', '-o', '/output', '--no-minify', '--analyze', '--no-asset-rewrite'])
+
+      expect(mockBuildCommand).toHaveBeenCalledWith({
+        basePath: '/path',
+        output: '/output',
+        minify: false,
+        analyze: true,
+        noAssetRewrite: true
       })
     })
   })

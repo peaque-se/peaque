@@ -4,6 +4,7 @@ import path from "path"
 import colors from "yoctocolors"
 import { createHash } from "crypto"
 import { precompressAssets } from "../assets/precompress-assets.js"
+import { rewritePublicAssetReferences } from "../assets/asset-rewriter.js"
 import { mergeHead, renderHead } from "../client/head.js"
 import { ModuleLoader } from "../hmr/module-loader.js"
 import { HeadDefinition } from "../index.js"
@@ -416,7 +417,8 @@ function generateBackendServerCode(apiRouter: RouteNode<string>, headStacks: Map
   generatePageRouteRegistrations(pageRouter)
 
   // Add asset routes with long-term caching enabled
-  routerFunction.push(`  await addAssetRoutesForFolder(router, \`\${process.cwd()}/${assetPath}\`, "/${assetPath}", true)`)
+  // Also serve assets without the hash prefix for backward compatibility (e.g., /test.png instead of /assets-{hash}/test.png)
+  routerFunction.push(`  await addAssetRoutesForFolder(router, \`\${process.cwd()}/${assetPath}\`, "/${assetPath}", true, true)`)
   routerFunction.push("  return router")
   routerFunction.push("}")
 
@@ -458,11 +460,14 @@ function generateBackendServerCode(apiRouter: RouteNode<string>, headStacks: Map
   return [...imports, "", ...htmlConstants, "", jobsFunction, ...routerFunction, "", ...startupFunction].join("\n")
 }
 
-export const buildForProduction = async (basePath: string, distFolder: string, minify: boolean, analyze: boolean = false) => {
+export const buildForProduction = async (basePath: string, distFolder: string, minify: boolean, analyze: boolean = false, noAssetRewrite: boolean = false) => {
   const startTime = Date.now()
   console.log(`📦  ${colors.bold(colors.yellow("Peaque Framework " + platformVersion))} building for production`)
   console.log(`     ${colors.green("✓")} Base path ${colors.gray(`${basePath}`)}`)
   console.log(`     ${colors.green("✓")} Output path ${colors.gray(`${distFolder}`)}`)
+  if (noAssetRewrite) {
+    console.log(`     ${colors.yellow("⚠")}  Asset rewriting ${colors.yellow("disabled")}`)
+  }
   const outDir = distFolder
   const theoreticalDistFolder = path.join(basePath, "dist")
 
@@ -482,7 +487,7 @@ export const buildForProduction = async (basePath: string, distFolder: string, m
     entryContent: frontendJs,
     baseDir: theoreticalDistFolder,
     sourcemap: false,
-    writeToFile: true,
+    writeToFile: false,
     outputFile: path.join(assetDir, "peaque.js"),
   })
   const result = await jsBundler.build()
@@ -490,11 +495,19 @@ export const buildForProduction = async (basePath: string, distFolder: string, m
     console.error("Errors during JS bundling:", result.errors)
     process.exit(1)
   }
+
+  // Rewrite asset references in the bundled JS (unless disabled)
+  const publicFolder = path.join(basePath, "src/public")
+  let jsContent = result.bundleContent || ""
+  if (!noAssetRewrite) {
+    jsContent = await rewritePublicAssetReferences(jsContent, publicFolder, `assets-${buildHash}`)
+  }
+
+  // Write the processed JS to file
+  fs.writeFileSync(path.join(assetDir, "peaque.js"), jsContent, "utf-8")
   // Filter out esbuild require.resolve warning since we want esbuild bundled
   if (result.warnings && result.warnings.length > 0) {
-    const filteredWarnings = result.warnings.filter(warning =>
-      !warning.includes('"esbuild" should be marked as external for use with "require.resolve"')
-    )
+    const filteredWarnings = result.warnings
     if (filteredWarnings.length > 0) {
       console.warn("Warnings during JS bundling:", filteredWarnings)
     }
@@ -571,10 +584,16 @@ export const buildForProduction = async (basePath: string, distFolder: string, m
   const stylePath = path.join(basePath, "src/styles.css")
   const cssContent = fs.readFileSync(stylePath, "utf-8")
   const newCssContent = await bundleCssFile(cssContent, basePath)
-  fs.writeFileSync(path.join(assetDir, "peaque.css"), newCssContent, "utf-8")
+
+  // Rewrite asset references in CSS (unless disabled)
+  const newCssContentFixed = noAssetRewrite
+    ? newCssContent
+    : await rewritePublicAssetReferences(newCssContent, publicFolder, `assets-${buildHash}`)
+
+  fs.writeFileSync(path.join(assetDir, "peaque.css"), newCssContentFixed, "utf-8")
 
   // Copy public folder if it exists
-  const publicFolder = path.join(basePath, "src/public")
+  //const publicFolder = path.join(basePath, "src/public")
   if (fs.existsSync(publicFolder)) {
     await fs.promises.cp(publicFolder, assetDir, { recursive: true })
   }

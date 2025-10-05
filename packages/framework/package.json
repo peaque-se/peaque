@@ -1,6 +1,6 @@
 {
   "name": "@peaque/framework",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "The last javascript framework ever to be needed - A modern, full-stack TypeScript framework with file-based routing, React, and Tailwind CSS",
   "type": "module",
   "license": "MIT",

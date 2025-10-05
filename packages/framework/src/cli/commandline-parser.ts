@@ -36,6 +36,7 @@ export function createCommandLineParser(
     .option("-b, --base <path>", "load project from other base path (default: current directory)")
     .addOption(new Option("--no-minify", "disable code minification").hideHelp())
     .option("--analyze", "print bundle size breakdown to console")
+    .option("--no-asset-rewrite", "disable automatic asset path rewriting")
     .action(async function () {
       const opts = this.opts()
       const basePath = opts.base || process.cwd()
@@ -43,7 +44,8 @@ export function createCommandLineParser(
         basePath,
         output: opts.output || path.join(basePath, "dist"),
         minify: opts.minify !== false, // --no-minify sets minify to false
-        analyze: opts.analyze || false
+        analyze: opts.analyze || false,
+        noAssetRewrite: opts.assetRewrite === false // --no-asset-rewrite sets assetRewrite to false
       })
     })
   

@@ -6,6 +6,7 @@
 import { BuildContext, BuildResult, context } from "esbuild"
 import * as fs from "fs"
 import * as path from "path"
+import { excludeDevModulesPlugin, frameworkDepsPlugin } from "./backend-bundler.js"
 
 export interface FrontendBuildOptions {
   entryFile?: string // Optional when entryContent is provided
@@ -194,6 +195,7 @@ export class FrontendBundler {
         //        'react-dom',
         ...external,
       ],
+      plugins: [frameworkDepsPlugin(["croner", "react-refresh", "react", "react-dom", "tailwindcss", "dotenv"])],
       //      packages: 'external', // Keep node_modules external for performance
       logLevel: "silent", // We'll handle errors ourselves
     }

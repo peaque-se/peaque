@@ -73,7 +73,7 @@ function createHandler(asset: AssetData, enableLongCache: boolean = false): Requ
   }
 }
 
-export async function addAssetRoutesForFolder(router: Router, folderPath: string, basePath: string = "/assets", enableLongCache: boolean = false): Promise<AssetStats> {
+export async function addAssetRoutesForFolder(router: Router, folderPath: string, basePath: string = "/assets", enableLongCache: boolean = false, alsoServeWithoutPrefix: boolean = false): Promise<AssetStats> {
   const assets = new Map<string, AssetData>()
 
   let totalBytesInMemory = 0
@@ -131,6 +131,13 @@ export async function addAssetRoutesForFolder(router: Router, folderPath: string
     const routePath = `${basePath}/${relativePath}`.replace(/\\/g, "/") // Ensure forward slashes
     const handler = createHandler(asset, enableLongCache)
     router.addRoute("GET", routePath, handler)
+
+    // Also register without the hash prefix if requested (for backward compatibility)
+    if (alsoServeWithoutPrefix) {
+      const rootPath = `/${relativePath}`.replace(/\\/g, "/")
+      const shortCacheHandler = createHandler(asset, false) // Don't use long cache for non-hashed paths
+      router.addRoute("GET", rootPath, shortCacheHandler)
+    }
   }
 
   return {

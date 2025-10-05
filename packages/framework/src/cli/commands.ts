@@ -15,6 +15,7 @@ export interface BuildCommandOptions {
   output: string
   minify: boolean
   analyze: boolean
+  noAssetRewrite: boolean
 }
 
 export interface StartCommandOptions {
@@ -59,7 +60,7 @@ export async function buildCommand(
   const exit = deps?.exit || ((code?: number) => process.exit(code))
 
   try {
-    await buildForProduction(options.basePath, options.output, options.minify, options.analyze)
+    await buildForProduction(options.basePath, options.output, options.minify, options.analyze, options.noAssetRewrite)
     exit(0)
   } catch (err) {
     console.log("Build error:", err)
