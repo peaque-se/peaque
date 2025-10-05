@@ -49,6 +49,9 @@
     "url": "https://github.com/peaque-se/peaque/issues"
   },
   "homepage": "https://peaque.dev/framework",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "clean": "node ../../scripts/rmdir.mjs dist",
     "build": "npm run clean && tsc",
