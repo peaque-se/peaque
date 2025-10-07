@@ -129,7 +129,8 @@ describe('CLI Command Parsing', () => {
         output: path.join(process.cwd(), 'dist'),
         minify: true,
         analyze: false,
-        noAssetRewrite: false
+        noAssetRewrite: false,
+        serverlessFrontend: false
       })
     })
 
@@ -142,7 +143,8 @@ describe('CLI Command Parsing', () => {
         output: '/custom/output',
         minify: true,
         analyze: false,
-        noAssetRewrite: false
+        noAssetRewrite: false,
+        serverlessFrontend: false
       })
     })
 
@@ -155,7 +157,8 @@ describe('CLI Command Parsing', () => {
         output: '/custom/output',
         minify: true,
         analyze: false,
-        noAssetRewrite: false
+        noAssetRewrite: false,
+        serverlessFrontend: false
       })
     })
 
@@ -168,7 +171,8 @@ describe('CLI Command Parsing', () => {
         output: path.join('/custom/path', 'dist'),
         minify: true,
         analyze: false,
-        noAssetRewrite: false
+        noAssetRewrite: false,
+        serverlessFrontend: false
       })
     })
 
@@ -181,7 +185,8 @@ describe('CLI Command Parsing', () => {
         output: path.join('/custom/path', 'dist'),
         minify: true,
         analyze: false,
-        noAssetRewrite: false
+        noAssetRewrite: false,
+        serverlessFrontend: false
       })
     })
 
@@ -194,7 +199,8 @@ describe('CLI Command Parsing', () => {
         output: path.join(process.cwd(), 'dist'),
         minify: false,
         analyze: false,
-        noAssetRewrite: false
+        noAssetRewrite: false,
+        serverlessFrontend: false
       })
     })
 
@@ -207,7 +213,8 @@ describe('CLI Command Parsing', () => {
         output: '/output',
         minify: false,
         analyze: false,
-        noAssetRewrite: false
+        noAssetRewrite: false,
+        serverlessFrontend: false
       })
     })
 
@@ -220,7 +227,8 @@ describe('CLI Command Parsing', () => {
         output: path.join(process.cwd(), 'dist'),
         minify: true,
         analyze: true,
-        noAssetRewrite: false
+        noAssetRewrite: false,
+        serverlessFrontend: false
       })
     })
 
@@ -233,7 +241,8 @@ describe('CLI Command Parsing', () => {
         output: '/output',
         minify: false,
         analyze: true,
-        noAssetRewrite: false
+        noAssetRewrite: false,
+        serverlessFrontend: false
       })
     })
 
@@ -246,20 +255,36 @@ describe('CLI Command Parsing', () => {
         output: path.join(process.cwd(), 'dist'),
         minify: true,
         analyze: false,
-        noAssetRewrite: true
+        noAssetRewrite: true,
+        serverlessFrontend: false
       })
     })
 
-    it('should parse "peaque build -b /path -o /output --no-minify --analyze --no-asset-rewrite" with all options', () => {
+    it('should parse "peaque build --serverless-frontend" with serverless frontend enabled', () => {
       const program = createCommandLineParser(mockDevCommand, mockBuildCommand, mockStartCommand)
-      program.parse(['node', 'peaque', 'build', '-b', '/path', '-o', '/output', '--no-minify', '--analyze', '--no-asset-rewrite'])
+      program.parse(['node', 'peaque', 'build', '--serverless-frontend'])
+
+      expect(mockBuildCommand).toHaveBeenCalledWith({
+        basePath: process.cwd(),
+        output: path.join(process.cwd(), 'dist'),
+        minify: true,
+        analyze: false,
+        noAssetRewrite: false,
+        serverlessFrontend: true
+      })
+    })
+
+    it('should parse "peaque build -b /path -o /output --serverless-frontend --analyze" with serverless frontend and other options', () => {
+      const program = createCommandLineParser(mockDevCommand, mockBuildCommand, mockStartCommand)
+      program.parse(['node', 'peaque', 'build', '-b', '/path', '-o', '/output', '--serverless-frontend', '--analyze'])
 
       expect(mockBuildCommand).toHaveBeenCalledWith({
         basePath: '/path',
         output: '/output',
-        minify: false,
+        minify: true,
         analyze: true,
-        noAssetRewrite: true
+        noAssetRewrite: false,
+        serverlessFrontend: true
       })
     })
   })

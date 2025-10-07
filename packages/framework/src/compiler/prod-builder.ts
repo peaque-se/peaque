@@ -460,7 +460,8 @@ function generateBackendServerCode(apiRouter: RouteNode<string>, headStacks: Map
   return [...imports, "", ...htmlConstants, "", jobsFunction, ...routerFunction, "", ...startupFunction].join("\n")
 }
 
-export const buildForProduction = async (basePath: string, distFolder: string, minify: boolean, analyze: boolean = false, noAssetRewrite: boolean = false) => {
+export const buildForProduction = async (basePath: string, distFolder: string, minify: boolean, 
+  analyze: boolean = false, noAssetRewrite: boolean = false, serverlessFrontend: boolean = false) => {
   const startTime = Date.now()
   console.log(`📦  ${colors.bold(colors.yellow("Peaque Framework " + platformVersion))} building for production`)
   console.log(`     ${colors.green("✓")} Base path ${colors.gray(`${basePath}`)}`)
@@ -640,6 +641,34 @@ require("${pathToOutputFromTheoretical == "" ? "." : pathToOutputFromTheoretical
   })
 
   fs.unlinkSync(path.join(outDir, "server_without_env.cjs"))
+
+  // Generate serverless frontend index.html if requested
+  if (serverlessFrontend) {
+    const defaultHead: HeadDefinition = {
+      title: "Peaque Framework Application",
+      meta: [
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        { name: "description", content: "A Peaque Framework Application" },
+      ],
+      link: [{ rel: "stylesheet", href: `/${assetPath}/peaque.css` }],
+    }
+
+    const renderedHead = renderHead(defaultHead, `/${assetPath}`)
+    const indexHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+${renderedHead}
+</head>
+<body>
+<div id="peaque"></div>
+<script type="module" src="/${assetPath}/peaque.js"></script>
+</body>
+</html>`
+
+    fs.writeFileSync(path.join(outDir, "index.html"), indexHtml, "utf-8")
+    console.log(`     ${colors.green("✓")} Generated serverless ${colors.gray("index.html")}`)
+  }
 
   // experimental: check if the baseDir/node_modules/.prisma exists, if so copy the whole baseDir/node_modules/.prisma/ to dist/node_modules/.prisma
   try {
