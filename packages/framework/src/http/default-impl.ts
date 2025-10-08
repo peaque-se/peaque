@@ -200,6 +200,10 @@ export class PeaqueRequestImpl implements PeaqueRequest {
     this.headersData[name].push(value);
     return this;
   }
+  responseHeader(name: string): string | undefined {
+    const values = this.headersData[name.toLowerCase()];
+    return values ? values[0] : undefined;
+  }
   send<T = unknown>(data?: T): void {
     this.sendData = data;
     this.responded = true;

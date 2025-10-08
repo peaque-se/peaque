@@ -32,6 +32,7 @@ export interface PeaqueRequest {
 
   code(statusCode: number): PeaqueRequest
   header(name: string, value: string): PeaqueRequest
+  responseHeader(name: string): string | undefined // read response header
   type(contentType: string): PeaqueRequest
   send<T = unknown>(data?: T): void
   redirect(url: string, code?: number): void
