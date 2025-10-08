@@ -28,7 +28,7 @@ export class JobsRunner {
 
   async startOrUpdateJobs() {
     const moduleLoader = new ModuleLoader({ absWorkingDir: this.baseDir })
-    const jobFiles = await glob(`${this.jobsDir}/**/*job.ts`)
+    const jobFiles = await glob(`${this.jobsDir}/**/*job.ts`, { absolute: true })
     for (const file of jobFiles) {
       const hash = await hashFile(file)
       const jobName = path.dirname(path.relative(this.jobsDir, file))
