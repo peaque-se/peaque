@@ -10,6 +10,9 @@ import * as esbuild from "esbuild"
 import { createRequire } from "module"
 import { makeImportsRelative } from "./imports.js"
 
+const frameworkRequire = createRequire(import.meta.url)
+const frameworkResolve = frameworkRequire.resolve
+
 interface PackageJson {
   name?: string
   version?: string
@@ -179,12 +182,23 @@ export function setBaseDependencies(basePath: string) {
 // It first determines the module type by checking the package.json
 // Then it calls the appropriate bundling function
 export async function bundleModuleFromNodeModules(moduleName: string, basePath: string): Promise<string> {
-  // try to load it from node_modules/@peaque/framework if not found
+  // try to load it from node_modules/@peaque/framework dependencies if not found
   let moduleBaseName = findModuleName(moduleName, basePath)
   if (!moduleBaseName) {
     moduleBaseName = findModuleName(moduleName, path.join(basePath, "node_modules", "@peaque", "framework"))
     if (!moduleBaseName) {
-      throw new Error(`Module ${moduleName} not found in node_modules or node_modules/@peaque/framework`)
+      // one final attempt - try to find the module in whatever node_modules we are currently loading from
+      let ourOwnModules = frameworkResolve("esbuild") // any of our dependencies should do
+      while (path.basename(ourOwnModules) !== "node_modules") {
+        ourOwnModules = path.dirname(ourOwnModules)
+      }
+      ourOwnModules = path.dirname(ourOwnModules)
+      moduleBaseName = findModuleName(moduleName, ourOwnModules)
+      if (!moduleBaseName) {
+        throw new Error(`Module ${moduleName} not found in node_modules or node_modules/@peaque/framework`)
+      } else {
+        basePath = ourOwnModules
+      }
     } else {
       basePath = path.join(basePath, "node_modules", "@peaque", "framework")
     }
