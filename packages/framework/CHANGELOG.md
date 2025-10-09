@@ -1,5 +1,11 @@
 # @peaque/framework
 
+## 2.6.0
+
+### Minor Changes
+
+- Integrated react-compiler for production builds.
+
 ## 2.5.0
 
 ### Minor Changes
