@@ -276,6 +276,19 @@ function locationToHref(location: Location): string {
 export function Router({ root, loading = <div>Loading...</div>, missing = <div>404 Not Found</div>, error = <ErrorPanel />, accessDenied = <div>Access Denied</div> }: RouterProps): ReactElement {
   const res = useRouterResult(root)
 
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state
+      if (state && state.scrollPos) {
+        window.scrollTo(state.scrollPos.x, state.scrollPos.y)
+      } else {
+        window.scrollTo(0, 0)
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
   if (res.status === "pending") {
     return <>{loading}</>
   }
