@@ -49,7 +49,7 @@ function componentify(router: RouteNode<string>, baseDir: string): Set<string> {
         const componentName = getComponentName(name)
         node.names[key] = componentName
         const filename = path.relative(baseDir, name)
-        imports.add(`import ${componentName} from "../src/pages/${filename.replace(/\\/g, "/")}";`)
+        imports.add(`import ${componentName} from "./src/pages/${filename.replace(/\\/g, "/")}";`)
       }
     }
     if (node.stacks) {
@@ -57,7 +57,7 @@ function componentify(router: RouteNode<string>, baseDir: string): Set<string> {
         node.stacks[key] = node.stacks[key].map((name: string) => {
           const componentName = getComponentName(name)
           const filename = path.relative(baseDir, name)
-          imports.add(`import ${componentName} from "../src/pages/${filename.replace(/\\/g, "/")}";`)
+          imports.add(`import ${componentName} from "./src/pages/${filename.replace(/\\/g, "/")}";`)
           return componentName
         })
       }
@@ -110,16 +110,16 @@ function generateFrontendRouterJs(router: RouteNode<string>, imports: Set<string
 
   // Add imports for special pages
   if (loadingPage) {
-    result.push(`import ${loadingPage} from "../src/pages/loading.tsx";`)
+    result.push(`import ${loadingPage} from "./src/pages/loading.tsx";`)
   }
   if (missingPage) {
-    result.push(`import ${missingPage} from "../src/pages/404.tsx";`)
+    result.push(`import ${missingPage} from "./src/pages/404.tsx";`)
   }
   if (errorPage) {
-    result.push(`import ${errorPage} from "../src/pages/error.tsx";`)
+    result.push(`import ${errorPage} from "./src/pages/error.tsx";`)
   }
   if (accessDeniedPage) {
-    result.push(`import ${accessDeniedPage} from "../src/pages/403.tsx";`)
+    result.push(`import ${accessDeniedPage} from "./src/pages/403.tsx";`)
   }
 
   result.push(serializeRouterToJs(router, true))
@@ -271,7 +271,7 @@ function detectExportedMethods(filePath: string): string[] {
         const relativePath = path.relative(basePath, file).replace(/\\/g, "/")
         const displayName = path.relative(jobsDir, file).replace(/\\/g, "/").replace("/job.ts", "")
         const alias = relativePath.replace(/[^a-zA-Z0-9]/g, "_") + "Job"
-        imports.push(`import * as ${alias} from "../${relativePath}";`)
+        imports.push(`import * as ${alias} from "./${relativePath}";`)
 
         program.push(`  for (const schedule of ${alias}.schedule) {`)
         program.push(`    const job = new Cron(schedule, { protect: true }, () => {`)
@@ -311,7 +311,7 @@ function generateBackendServerCode(apiRouter: RouteNode<string>, headStacks: Map
       const relativePath = path.relative(basePath, handlerFile).replace(/\\/g, "/")
       const alias = relativePath.replace(/[^a-zA-Z0-9]/g, "_")
       const methods = detectExportedMethods(handlerFile)
-      handlerImports.push({ alias, path: "../" + relativePath, file: handlerFile, methods })
+      handlerImports.push({ alias, path: "./" + relativePath, file: handlerFile, methods })
     }
 
     for (const [key, child] of node.staticChildren.entries()) {
@@ -340,11 +340,11 @@ function generateBackendServerCode(apiRouter: RouteNode<string>, headStacks: Map
   let startupReference = ""
   let rootMiddleware = ""
   if (fs.existsSync(path.join(basePath, "src", "startup.ts"))) {
-    startupImport = `import * as StartupModule from "../src/startup.ts"`
+    startupImport = `import * as StartupModule from "./src/startup.ts"`
     startupReference = `  // Ensure startup module is loaded for side effects\n  StartupModule`
   }
   if (fs.existsSync(path.join(basePath, "src", "middleware.ts"))) {
-    rootMiddleware = `import { middleware as AbsoluteRootMiddleware } from "../src/middleware.ts"`
+    rootMiddleware = `import { middleware as AbsoluteRootMiddleware } from "./src/middleware.ts"`
   }
 
   if (startupImport) imports.push(startupImport)
@@ -473,7 +473,7 @@ export const buildForProduction = async (basePath: string, distFolder: string, m
     console.log(`     ${colors.yellow("✗")} React Compiler ${colors.yellow("disabled")}`)
   }
   const outDir = distFolder
-  const theoreticalDistFolder = path.join(basePath, "dist")
+  const intermediateBundleFolder = basePath
 
   // Build frontend router
   const frontend = buildRouter(basePath + "/src/pages", pageRouterConfig) as RouteNode<string>
@@ -489,7 +489,7 @@ export const buildForProduction = async (basePath: string, distFolder: string, m
   // Bundle frontend
   const jsBundler = new FrontendBundler({
     entryContent: frontendJs,
-    baseDir: theoreticalDistFolder,
+    baseDir: intermediateBundleFolder,
     sourcemap: false,
     writeToFile: false,
     outputFile: path.join(assetDir, "peaque.js"),
@@ -622,7 +622,7 @@ export const buildForProduction = async (basePath: string, distFolder: string, m
 
   // Write backend code
   await bundleBackendProgram({
-    baseDir: theoreticalDistFolder,
+    baseDir: intermediateBundleFolder,
     outfile: path.join(outDir, "server_without_env.cjs"),
     inputContent: backendCode,
     minify,
@@ -630,15 +630,15 @@ export const buildForProduction = async (basePath: string, distFolder: string, m
   })
 
   // Create main.js with env loading
-  const pathToOutputFromTheoretical = path.relative(theoreticalDistFolder, outDir).replace(/\\/g, "/")
+  const pathToOutputFromBundle = path.relative(intermediateBundleFolder, outDir).replace(/\\/g, "/")
   const mainJs = `import dotenv from "dotenv"
 const currentPath = process.cwd()
 dotenv.config({path: \`\${currentPath}/.env\`, override: true})
 dotenv.config()
-require("${pathToOutputFromTheoretical == "" ? "." : pathToOutputFromTheoretical}/server_without_env.cjs")`
+require("${pathToOutputFromBundle == "" ? "." : pathToOutputFromBundle}/server_without_env.cjs")`
 
   await bundleBackendProgram({
-    baseDir: theoreticalDistFolder,
+    baseDir: intermediateBundleFolder,
     outfile: path.join(outDir, "main.cjs"),
     inputContent: mainJs,
     minify,
