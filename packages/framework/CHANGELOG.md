@@ -1,5 +1,11 @@
 # @peaque/framework
 
+## 2.6.1
+
+### Patch Changes
+
+- bugfix: Don't require a dist folder for 'peaque build' to succeed.
+
 ## 2.6.0
 
 ### Minor Changes
