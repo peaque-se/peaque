@@ -48,11 +48,24 @@ async function pageChanged(root: RouteNode, href: string) {
 
   const guardsAndMiddlewares = [...match.guards, ...match.middleware]
 
+  let pending = false
+  const timeoutSymbol = Symbol("timeout")
   if (guardsAndMiddlewares.length > 0) {
-    setCurrentRouterResult({ status: "pending", match: null, layouts: null, content: null, title: null })
     for (const guard of guardsAndMiddlewares) {
       try {
-        const guardResult = await guard({ params: match.params, path, pattern: match.pattern })
+        let guardResult = null
+        if (!pending) {
+          const sleepPromise = new Promise(resolve => setTimeout(()=>resolve(timeoutSymbol), 10))
+          const guardPromise = guard({ params: match.params, path, pattern: match.pattern })
+          const raceResult = await Promise.race([sleepPromise, guardPromise])
+          if (raceResult === timeoutSymbol) {
+            setCurrentRouterResult({ status: "pending", match: null, layouts: null, content: null, title: null })
+            pending = true
+          }
+          guardResult = await guardPromise
+        } else {
+           guardResult = await guard({ params: match.params, path, pattern: match.pattern })
+        }
         if (guardResult === true) {
           continue
         } else if (typeof guardResult === "string") {
