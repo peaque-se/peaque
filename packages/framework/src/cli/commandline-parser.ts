@@ -1,17 +1,13 @@
 import { Command, Option } from "commander"
 import path from "path"
-import { platformVersion } from "../server/version.js"
-import type { DevCommandOptions, BuildCommandOptions, StartCommandOptions } from "./commands.js"
 import type { DevServer } from "../server/dev-server.js"
+import { platformVersion } from "../server/version.js"
+import type { BuildCommandOptions, DevCommandOptions, StartCommandOptions } from "./commands.js"
 
-export function createCommandLineParser(
-  devCommand: (options: DevCommandOptions) => Promise<DevServer>,
-  buildCommand: (options: BuildCommandOptions) => Promise<void>,
-  startCommand: (options: StartCommandOptions) => Promise<void>
-) {
+export function createCommandLineParser(devCommand: (options: DevCommandOptions) => Promise<DevServer>, buildCommand: (options: BuildCommandOptions) => Promise<void>, startCommand: (options: StartCommandOptions) => Promise<void>) {
   const program = new Command()
   program.name("peaque").description("Peaque Framework CLI").version(platformVersion)
-  
+
   program
     .command("dev")
     .description("Start development server")
@@ -25,10 +21,10 @@ export function createCommandLineParser(
         basePath: opts.base || process.cwd(),
         port: parseInt(opts.port, 10),
         strict: opts.strict !== false, // --no-strict sets strict to false
-        fullStackTrace: opts.fullStackTraces || false
+        fullStackTrace: opts.fullStackTraces || false,
       })
     })
-  
+
   program
     .command("build")
     .description("Build the application for production")
@@ -37,6 +33,7 @@ export function createCommandLineParser(
     .addOption(new Option("--no-minify", "disable code minification").hideHelp())
     .option("--analyze", "print bundle size breakdown to console")
     .option("--no-asset-rewrite", "disable automatic asset path rewriting")
+    .option("--no-react-compiler", "disable React Compiler automatic optimizations")
     .option("--serverless-frontend", "build the frontend for serverless deployment (e.g., AWS S3 + CloudFront)")
     .action(async function () {
       const opts = this.opts()
@@ -47,10 +44,11 @@ export function createCommandLineParser(
         minify: opts.minify !== false, // --no-minify sets minify to false
         analyze: opts.analyze || false,
         noAssetRewrite: opts.assetRewrite === false, // --no-asset-rewrite sets assetRewrite to false
-        serverlessFrontend: opts.serverlessFrontend || false
+        serverlessFrontend: opts.serverlessFrontend || false,
+        reactCompiler: opts.reactCompiler !== false, // --no-react-compiler sets reactCompiler to false
       })
     })
-  
+
   program
     .command("start")
     .description("Start the production server")
@@ -60,9 +58,9 @@ export function createCommandLineParser(
       const opts = this.opts()
       await startCommand({
         basePath: opts.base || process.cwd(),
-        port: parseInt(opts.port, 10)
+        port: parseInt(opts.port, 10),
       })
     })
-  
+
   return program
 }

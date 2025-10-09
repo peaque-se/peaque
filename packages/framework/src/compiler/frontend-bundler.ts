@@ -6,7 +6,8 @@
 import { BuildContext, BuildResult, context } from "esbuild"
 import * as fs from "fs"
 import * as path from "path"
-import { excludeDevModulesPlugin, frameworkDepsPlugin } from "./backend-bundler.js"
+import { frameworkDepsPlugin } from "./backend-bundler.js"
+import { reactCompilerPlugin } from "./react-compiler-plugin.js"
 
 export interface FrontendBuildOptions {
   entryFile?: string // Optional when entryContent is provided
@@ -21,6 +22,8 @@ export interface FrontendBuildOptions {
   external?: string[]
   /** Whether to write to file or return as string */
   writeToFile?: boolean
+  /** Enable React Compiler for automatic optimizations (default: true in production) */
+  reactCompiler?: boolean
 }
 
 export interface DependencyInfo {
@@ -139,7 +142,7 @@ export class FrontendBundler {
       return // Already initialized
     }
 
-    const { entryFile, entryContent, baseDir, outputFile, isDevelopment = false, sourcemap = true, minify = !isDevelopment, define = {}, alias = {}, external = [], writeToFile = true } = this.options
+    const { entryFile, entryContent, baseDir, outputFile, isDevelopment = false, sourcemap = true, minify = !isDevelopment, define = {}, alias = {}, external = [], writeToFile = true, reactCompiler = !isDevelopment } = this.options
 
     // Validate input options
     if (!entryFile && !entryContent) {
@@ -195,7 +198,10 @@ export class FrontendBundler {
         //        'react-dom',
         ...external,
       ],
-      plugins: [frameworkDepsPlugin(["croner", "react-refresh", "react", "react-dom", "tailwindcss", "dotenv"])],
+      plugins: [
+        reactCompilerPlugin({ enabled: reactCompiler }),
+        frameworkDepsPlugin(["croner", "react-refresh", "react", "react-dom", "tailwindcss", "dotenv"]),
+      ],
       //      packages: 'external', // Keep node_modules external for performance
       logLevel: "silent", // We'll handle errors ourselves
     }

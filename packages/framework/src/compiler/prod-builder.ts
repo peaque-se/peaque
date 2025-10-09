@@ -460,14 +460,17 @@ function generateBackendServerCode(apiRouter: RouteNode<string>, headStacks: Map
   return [...imports, "", ...htmlConstants, "", jobsFunction, ...routerFunction, "", ...startupFunction].join("\n")
 }
 
-export const buildForProduction = async (basePath: string, distFolder: string, minify: boolean, 
-  analyze: boolean = false, noAssetRewrite: boolean = false, serverlessFrontend: boolean = false) => {
+export const buildForProduction = async (basePath: string, distFolder: string, minify: boolean,
+  analyze: boolean = false, noAssetRewrite: boolean = false, serverlessFrontend: boolean = false, reactCompiler: boolean = true) => {
   const startTime = Date.now()
   console.log(`📦  ${colors.bold(colors.yellow("Peaque Framework " + platformVersion))} building for production`)
   console.log(`     ${colors.green("✓")} Base path ${colors.gray(`${basePath}`)}`)
   console.log(`     ${colors.green("✓")} Output path ${colors.gray(`${distFolder}`)}`)
   if (noAssetRewrite) {
-    console.log(`     ${colors.yellow("⚠")}  Asset rewriting ${colors.yellow("disabled")}`)
+    console.log(`     ${colors.yellow("✗")} Asset rewriting ${colors.yellow("disabled")}`)
+  }
+  if (!reactCompiler) {
+    console.log(`     ${colors.yellow("✗")} React Compiler ${colors.yellow("disabled")}`)
   }
   const outDir = distFolder
   const theoreticalDistFolder = path.join(basePath, "dist")
@@ -490,6 +493,8 @@ export const buildForProduction = async (basePath: string, distFolder: string, m
     sourcemap: false,
     writeToFile: false,
     outputFile: path.join(assetDir, "peaque.js"),
+    reactCompiler,
+    isDevelopment: false,
   })
   const result = await jsBundler.build()
   if (result.errors && result.errors.length > 0) {

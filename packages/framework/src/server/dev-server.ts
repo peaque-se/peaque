@@ -199,7 +199,7 @@ export class DevServer {
       console.log(`     ${colors.green("✓")} Local ${colors.underline(`http://localhost:${this.port}`)}`)
       console.log(`     ${colors.green("✓")} Base path ${colors.gray(`${this.basePath}`)}`)
       if (this.noStrict) {
-        console.log(`     ${colors.green("✓")} React Strict Mode is ${colors.bold("disabled")}`)
+        console.log(`     ${colors.yellow("✗")} React Strict Mode is ${colors.bold("disabled")}`)
       }
       console.log(`     ${colors.green("✓")} Have fun coding!`)
     } catch (error: any) {

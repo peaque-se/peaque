@@ -21,6 +21,12 @@ describe('CLI Command Parsing', () => {
     mockStartCommand = jest.fn<(options: StartCommandOptions) => Promise<void>>().mockResolvedValue(undefined)
   })
 
+  // Helper function to parse and test commands
+  const parseCommand = (args: string[]) => {
+    const program = createCommandLineParser(mockDevCommand, mockBuildCommand, mockStartCommand)
+    program.parse(args)
+  }
+
   describe('dev command', () => {
     it('should parse "peaque dev" with default options', () => {
       const program = createCommandLineParser(mockDevCommand, mockBuildCommand, mockStartCommand)
@@ -130,7 +136,8 @@ describe('CLI Command Parsing', () => {
         minify: true,
         analyze: false,
         noAssetRewrite: false,
-        serverlessFrontend: false
+        serverlessFrontend: false,
+        reactCompiler: true
       })
     })
 
@@ -144,7 +151,8 @@ describe('CLI Command Parsing', () => {
         minify: true,
         analyze: false,
         noAssetRewrite: false,
-        serverlessFrontend: false
+        serverlessFrontend: false,
+        reactCompiler: true
       })
     })
 
@@ -158,7 +166,8 @@ describe('CLI Command Parsing', () => {
         minify: true,
         analyze: false,
         noAssetRewrite: false,
-        serverlessFrontend: false
+        serverlessFrontend: false,
+        reactCompiler: true
       })
     })
 
@@ -172,7 +181,8 @@ describe('CLI Command Parsing', () => {
         minify: true,
         analyze: false,
         noAssetRewrite: false,
-        serverlessFrontend: false
+        serverlessFrontend: false,
+        reactCompiler: true
       })
     })
 
@@ -186,7 +196,8 @@ describe('CLI Command Parsing', () => {
         minify: true,
         analyze: false,
         noAssetRewrite: false,
-        serverlessFrontend: false
+        serverlessFrontend: false,
+        reactCompiler: true
       })
     })
 
@@ -200,7 +211,8 @@ describe('CLI Command Parsing', () => {
         minify: false,
         analyze: false,
         noAssetRewrite: false,
-        serverlessFrontend: false
+        serverlessFrontend: false,
+        reactCompiler: true
       })
     })
 
@@ -214,7 +226,8 @@ describe('CLI Command Parsing', () => {
         minify: false,
         analyze: false,
         noAssetRewrite: false,
-        serverlessFrontend: false
+        serverlessFrontend: false,
+        reactCompiler: true
       })
     })
 
@@ -228,7 +241,8 @@ describe('CLI Command Parsing', () => {
         minify: true,
         analyze: true,
         noAssetRewrite: false,
-        serverlessFrontend: false
+        serverlessFrontend: false,
+        reactCompiler: true
       })
     })
 
@@ -242,7 +256,8 @@ describe('CLI Command Parsing', () => {
         minify: false,
         analyze: true,
         noAssetRewrite: false,
-        serverlessFrontend: false
+        serverlessFrontend: false,
+        reactCompiler: true
       })
     })
 
@@ -256,7 +271,8 @@ describe('CLI Command Parsing', () => {
         minify: true,
         analyze: false,
         noAssetRewrite: true,
-        serverlessFrontend: false
+        serverlessFrontend: false,
+        reactCompiler: true
       })
     })
 
@@ -270,7 +286,8 @@ describe('CLI Command Parsing', () => {
         minify: true,
         analyze: false,
         noAssetRewrite: false,
-        serverlessFrontend: true
+        serverlessFrontend: true,
+        reactCompiler: true
       })
     })
 
@@ -284,7 +301,77 @@ describe('CLI Command Parsing', () => {
         minify: true,
         analyze: true,
         noAssetRewrite: false,
-        serverlessFrontend: true
+        serverlessFrontend: true,
+        reactCompiler: true
+      })
+    })
+
+    it('should parse "peaque build --no-react-compiler" with React Compiler disabled', () => {
+      const program = createCommandLineParser(mockDevCommand, mockBuildCommand, mockStartCommand)
+      program.parse(['node', 'peaque', 'build', '--no-react-compiler'])
+
+      expect(mockBuildCommand).toHaveBeenCalledWith({
+        basePath: process.cwd(),
+        output: path.join(process.cwd(), 'dist'),
+        minify: true,
+        analyze: false,
+        noAssetRewrite: false,
+        serverlessFrontend: false,
+        reactCompiler: false
+      })
+    })
+
+    it('should parse "peaque build -b /path --no-react-compiler --no-minify" with React Compiler and minify disabled', () => {
+      const program = createCommandLineParser(mockDevCommand, mockBuildCommand, mockStartCommand)
+      program.parse(['node', 'peaque', 'build', '-b', '/path', '--no-react-compiler', '--no-minify'])
+
+      expect(mockBuildCommand).toHaveBeenCalledWith({
+        basePath: '/path',
+        output: path.join('/path', 'dist'),
+        minify: false,
+        analyze: false,
+        noAssetRewrite: false,
+        serverlessFrontend: false,
+        reactCompiler: false
+      })
+    })
+
+    it('should parse "peaque build --analyze --no-react-compiler --serverless-frontend" with multiple flags', () => {
+      const program = createCommandLineParser(mockDevCommand, mockBuildCommand, mockStartCommand)
+      program.parse(['node', 'peaque', 'build', '--analyze', '--no-react-compiler', '--serverless-frontend'])
+
+      expect(mockBuildCommand).toHaveBeenCalledWith({
+        basePath: process.cwd(),
+        output: path.join(process.cwd(), 'dist'),
+        minify: true,
+        analyze: true,
+        noAssetRewrite: false,
+        serverlessFrontend: true,
+        reactCompiler: false
+      })
+    })
+
+    it('should parse all build options together', () => {
+      const program = createCommandLineParser(mockDevCommand, mockBuildCommand, mockStartCommand)
+      program.parse([
+        'node', 'peaque', 'build',
+        '-b', '/custom/base',
+        '-o', '/custom/output',
+        '--no-minify',
+        '--analyze',
+        '--no-asset-rewrite',
+        '--serverless-frontend',
+        '--no-react-compiler'
+      ])
+
+      expect(mockBuildCommand).toHaveBeenCalledWith({
+        basePath: '/custom/base',
+        output: '/custom/output',
+        minify: false,
+        analyze: true,
+        noAssetRewrite: true,
+        serverlessFrontend: true,
+        reactCompiler: false
       })
     })
   })
@@ -347,6 +434,194 @@ describe('CLI Command Parsing', () => {
       expect(mockStartCommand).toHaveBeenCalledWith({
         basePath: '/path',
         port: 6000
+      })
+    })
+  })
+
+  describe('edge cases and validation', () => {
+    describe('port parsing', () => {
+      it('should parse numeric port strings correctly for dev command', () => {
+        parseCommand(['node', 'peaque', 'dev', '-p', '8080'])
+
+        expect(mockDevCommand).toHaveBeenCalledWith(
+          expect.objectContaining({ port: 8080 })
+        )
+      })
+
+      it('should parse numeric port strings correctly for start command', () => {
+        parseCommand(['node', 'peaque', 'start', '-p', '9000'])
+
+        expect(mockStartCommand).toHaveBeenCalledWith(
+          expect.objectContaining({ port: 9000 })
+        )
+      })
+
+      it('should handle port 0 (system-assigned port)', () => {
+        parseCommand(['node', 'peaque', 'dev', '-p', '0'])
+
+        expect(mockDevCommand).toHaveBeenCalledWith(
+          expect.objectContaining({ port: 0 })
+        )
+      })
+
+      it('should handle high port numbers (65535)', () => {
+        parseCommand(['node', 'peaque', 'dev', '-p', '65535'])
+
+        expect(mockDevCommand).toHaveBeenCalledWith(
+          expect.objectContaining({ port: 65535 })
+        )
+      })
+    })
+
+    describe('path handling', () => {
+      it('should handle absolute paths with spaces', () => {
+        parseCommand(['node', 'peaque', 'build', '-b', '/path with spaces/project'])
+
+        expect(mockBuildCommand).toHaveBeenCalledWith(
+          expect.objectContaining({
+            basePath: '/path with spaces/project',
+            output: path.join('/path with spaces/project', 'dist')
+          })
+        )
+      })
+
+      it('should handle relative paths', () => {
+        parseCommand(['node', 'peaque', 'build', '-b', './my-project'])
+
+        expect(mockBuildCommand).toHaveBeenCalledWith(
+          expect.objectContaining({
+            basePath: './my-project',
+            output: path.join('./my-project', 'dist')
+          })
+        )
+      })
+
+      it('should handle paths with special characters', () => {
+        parseCommand(['node', 'peaque', 'dev', '-b', '/path/with-dashes_and_underscores'])
+
+        expect(mockDevCommand).toHaveBeenCalledWith(
+          expect.objectContaining({ basePath: '/path/with-dashes_and_underscores' })
+        )
+      })
+    })
+
+    describe('boolean flag combinations', () => {
+      it('should handle multiple --no- flags together', () => {
+        parseCommand(['node', 'peaque', 'build', '--no-minify', '--no-asset-rewrite', '--no-react-compiler'])
+
+        expect(mockBuildCommand).toHaveBeenCalledWith(
+          expect.objectContaining({
+            minify: false,
+            noAssetRewrite: true,
+            reactCompiler: false
+          })
+        )
+      })
+
+      it('should handle mixed positive and negative flags', () => {
+        parseCommand(['node', 'peaque', 'build', '--analyze', '--no-minify', '--serverless-frontend', '--no-react-compiler'])
+
+        expect(mockBuildCommand).toHaveBeenCalledWith(
+          expect.objectContaining({
+            analyze: true,
+            minify: false,
+            serverlessFrontend: true,
+            reactCompiler: false
+          })
+        )
+      })
+    })
+
+    describe('default values verification', () => {
+      it('should use correct defaults for dev command', () => {
+        parseCommand(['node', 'peaque', 'dev'])
+
+        expect(mockDevCommand).toHaveBeenCalledWith({
+          basePath: process.cwd(),
+          port: 3000,
+          strict: true,
+          fullStackTrace: false
+        })
+      })
+
+      it('should use correct defaults for build command', () => {
+        parseCommand(['node', 'peaque', 'build'])
+
+        expect(mockBuildCommand).toHaveBeenCalledWith({
+          basePath: process.cwd(),
+          output: path.join(process.cwd(), 'dist'),
+          minify: true,
+          analyze: false,
+          noAssetRewrite: false,
+          serverlessFrontend: false,
+          reactCompiler: true
+        })
+      })
+
+      it('should use correct defaults for start command', () => {
+        parseCommand(['node', 'peaque', 'start'])
+
+        expect(mockStartCommand).toHaveBeenCalledWith({
+          basePath: process.cwd(),
+          port: 3000
+        })
+      })
+    })
+
+    describe('option order independence', () => {
+      it('should parse options in any order for build command', () => {
+        parseCommand(['node', 'peaque', 'build', '--analyze', '-b', '/path', '--no-minify', '-o', '/out'])
+
+        expect(mockBuildCommand).toHaveBeenCalledWith({
+          basePath: '/path',
+          output: '/out',
+          minify: false,
+          analyze: true,
+          noAssetRewrite: false,
+          serverlessFrontend: false,
+          reactCompiler: true
+        })
+      })
+
+      it('should parse options in reverse order for dev command', () => {
+        parseCommand(['node', 'peaque', 'dev', '--full-stack-traces', '--no-strict', '-p', '4000', '-b', '/base'])
+
+        expect(mockDevCommand).toHaveBeenCalledWith({
+          basePath: '/base',
+          port: 4000,
+          strict: false,
+          fullStackTrace: true
+        })
+      })
+    })
+
+    describe('React Compiler flag variations', () => {
+      it('should enable React Compiler by default', () => {
+        parseCommand(['node', 'peaque', 'build'])
+
+        expect(mockBuildCommand).toHaveBeenCalledWith(
+          expect.objectContaining({ reactCompiler: true })
+        )
+      })
+
+      it('should respect --no-react-compiler flag', () => {
+        parseCommand(['node', 'peaque', 'build', '--no-react-compiler'])
+
+        expect(mockBuildCommand).toHaveBeenCalledWith(
+          expect.objectContaining({ reactCompiler: false })
+        )
+      })
+
+      it('should work with --no-react-compiler at different positions', () => {
+        parseCommand(['node', 'peaque', 'build', '-b', '/path', '--no-react-compiler', '--analyze'])
+
+        expect(mockBuildCommand).toHaveBeenCalledWith(
+          expect.objectContaining({
+            basePath: '/path',
+            reactCompiler: false,
+            analyze: true
+          })
+        )
       })
     })
   })

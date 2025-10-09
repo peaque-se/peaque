@@ -17,6 +17,7 @@ export interface BuildCommandOptions {
   analyze: boolean
   serverlessFrontend: boolean
   noAssetRewrite: boolean
+  reactCompiler: boolean
 }
 
 export interface StartCommandOptions {
@@ -61,7 +62,7 @@ export async function buildCommand(
   const exit = deps?.exit || ((code?: number) => process.exit(code))
 
   try {
-    await buildForProduction(options.basePath, options.output, options.minify, options.analyze, options.noAssetRewrite, options.serverlessFrontend)
+    await buildForProduction(options.basePath, options.output, options.minify, options.analyze, options.noAssetRewrite, options.serverlessFrontend, options.reactCompiler)
     exit(0)
   } catch (err) {
     console.log("Build error:", err)
