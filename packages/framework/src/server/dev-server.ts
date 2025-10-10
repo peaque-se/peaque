@@ -20,6 +20,8 @@ import { match, RouteNode } from "../router/router.js"
 import { serializeRouterToJs } from "../router/serializer.js"
 import { FileCache } from "./file-cache.js"
 import { platformVersion } from "./version.js"
+import { makeRpcShim } from "./make-rpc.js"
+import * as superjson from "superjson"
 
 const pageRouterConfig: RouteFileConfig[] = [
   { pattern: "page.tsx", property: "page", stacks: false, accept: true },
@@ -242,6 +244,11 @@ export class DevServer {
       return await this.serveBundledSrcFile(req)
     }
 
+    // if path starts with /api/__rpc/, handle RPC requests
+    if (path.startsWith("/api/__rpc/")) {
+     return await this.handleRpcRequest(req)
+    }
+
     // if path starts with /api/, handle API requests
     if (path.startsWith("/api/")) {
       return await this.handleBackendApiRequest(req)
@@ -278,6 +285,21 @@ export class DevServer {
 
     // otherwise, serve the main application page
     return await this.serveMainPage(req)
+  }
+  
+  private async handleRpcRequest(req: PeaqueRequest) {
+    const rpcPath = req.path().substring(11) // remove /api/__rpc/
+    const firstSlash = rpcPath.lastIndexOf("/")
+    const moduleName = rpcPath.substring(0, firstSlash)
+    const functionName = rpcPath.substring(firstSlash + 1)
+    const modulePath = path.join(this.basePath, moduleName).replace(/\\/g, "/")
+    const module = await this.moduleCache.cacheByHash(modulePath, async () => {
+      return await this.moduleLoader.loadModule(moduleName)
+    })
+    const func = module[functionName]
+    const { args } = superjson.parse(req.rawBody()?.toString()||"{}") as { args: any[] }
+    const result = await func(...args)
+    req.type("application/json").send(superjson.stringify(result))
   }
 
   private watchSourceFiles() {
@@ -379,6 +401,12 @@ export class DevServer {
 
     try {
       const srcContent = readFileSync(fullPath, "utf-8")
+      if (srcContent.startsWith("'use server'") || srcContent.startsWith('"use server"')) {
+        const { shim } = await makeRpcShim(srcContent, fullPath.substring(this.basePath.length + 1).replace(/\\/g, "/"))
+        const shimWithImports = makeImportsRelative(shim, fullPath.substring(this.basePath.length + 1))
+        req.type("application/javascript").send(shimWithImports)
+        return
+      }
       const refreshifyContent = fastRefreshify(srcContent, srcPath)
       const processedContents = makeImportsRelative(refreshifyContent, fullPath.substring(this.basePath.length + 1))
       req.type("application/javascript").send(processedContents)

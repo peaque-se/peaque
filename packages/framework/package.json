@@ -83,7 +83,9 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-refresh": "^0.17.0",
+    "superjson": "^2.2.2",
     "tailwindcss": "^4.1.14",
+    "ts-morph": "^27.0.0",
     "ws": "^8.14.0",
     "yoctocolors": "^2.1.2"
   },

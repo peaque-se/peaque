@@ -3,11 +3,12 @@
 /// - return dependencies for HMR analysis
 ///
 
-import { BuildContext, BuildResult, context } from "esbuild"
+import { BuildContext, BuildResult, context, PluginBuild, OnLoadArgs } from "esbuild"
 import * as fs from "fs"
 import * as path from "path"
 import { frameworkDepsPlugin } from "./backend-bundler.js"
 import { reactCompilerPlugin } from "./react-compiler-plugin.js"
+import { makeRpcShim, ServerShim } from "../server/make-rpc.js"
 
 export interface FrontendBuildOptions {
   entryFile?: string // Optional when entryContent is provided
@@ -51,6 +52,8 @@ export interface FrontendBuildResult {
   bundleContent?: string
   /** Source map content as string (when writeToFile is false and sourcemap is true) */
   sourceMapContent?: string
+  /** Information about server shims used in the build */
+  serverShims?: Array<ServerShim>
 }
 
 interface MetafileInput {
@@ -122,6 +125,7 @@ export class FrontendBundler {
   private options: FrontendBuildOptions
   private context: BuildContext | null = null
   private lastResult: BuildResult | null = null
+  private serverShims: Array<ServerShim> = []
 
   constructor(options: FrontendBuildOptions) {
     this.options = { ...options }
@@ -174,6 +178,20 @@ export class FrontendBundler {
       ...alias,
     }
 
+    const useServerPlugin = {
+      name: 'use-server-plugin',
+      setup: (build: PluginBuild) => {
+        build.onLoad({ filter: /\.tsx?$/, namespace: 'file' }, async (args: OnLoadArgs) => {
+          const contents = (await fs.promises.readFile(args.path, 'utf8')).trim();
+          if (contents.startsWith('"use server"') || contents.startsWith("'use server'")) {
+            const { shim, exportedFunctions } = await makeRpcShim(contents, String(this.serverShims.length));
+            this.serverShims.push({ shim, path: args.path, exportedFunctions });
+            return { contents: shim };
+          }
+        });
+      }
+    };
+
     const buildOptions: Parameters<typeof context>[0] = {
       bundle: true,
       format: "esm",
@@ -198,10 +216,7 @@ export class FrontendBundler {
         //        'react-dom',
         ...external,
       ],
-      plugins: [
-        reactCompilerPlugin({ enabled: reactCompiler }),
-        frameworkDepsPlugin(["croner", "react-refresh", "react", "react-dom", "tailwindcss", "dotenv"]),
-      ],
+      plugins: [useServerPlugin, reactCompilerPlugin({ enabled: reactCompiler }), frameworkDepsPlugin(["croner", "react-refresh", "react", "tailwindcss", "dotenv", "superjson"])],
       //      packages: 'external', // Keep node_modules external for performance
       logLevel: "silent", // We'll handle errors ourselves
     }
@@ -237,6 +252,7 @@ export class FrontendBundler {
    * Perform the initial build
    */
   async build(): Promise<FrontendBuildResult> {
+    this.serverShims = []
     try {
       await this.initializeContext()
 
@@ -343,6 +359,7 @@ export class FrontendBundler {
       metafile: result.metafile,
       bundleContent,
       sourceMapContent,
+      serverShims: this.serverShims,
     }
   }
 
@@ -354,6 +371,7 @@ export class FrontendBundler {
       await this.context.dispose()
       this.context = null
       this.lastResult = null
+      this.serverShims = []
     }
   }
 

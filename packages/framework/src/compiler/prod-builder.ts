@@ -15,6 +15,7 @@ import { platformVersion } from "../server/version.js"
 import { bundleBackendProgram } from "./backend-bundler.js"
 import { FrontendBundler } from "./frontend-bundler.js"
 import { bundleCssFile } from "./tailwind-bundler.js"
+import { ServerShim } from "../server/make-rpc.js"
 
 const pageRouterConfig: RouteFileConfig[] = [
   { pattern: "page.tsx", property: "page", stacks: false, accept: true },
@@ -291,7 +292,7 @@ function detectExportedMethods(filePath: string): string[] {
   return program.join("\n");
 }
 
-function generateBackendServerCode(apiRouter: RouteNode<string>, headStacks: Map<string, { headStack: string[], html: string }>, pageRouter: RouteNode<string>, basePath: string, assetPath: string): string {
+function generateBackendServerCode(apiRouter: RouteNode<string>, headStacks: Map<string, { headStack: string[], html: string }>, pageRouter: RouteNode<string>, basePath: string, assetPath: string, serverShims: Array<ServerShim>): string {
   const imports: string[] = []
   const htmlConstants: string[] = []
   const routerCalls: string[] = []
@@ -389,6 +390,18 @@ function generateBackendServerCode(apiRouter: RouteNode<string>, headStacks: Map
   }
 
   generateApiRouteRegistrations(apiRouter)
+
+  // Add server shim registrations
+  if (serverShims.length > 0) imports.push(`import superjson from "superjson"`)
+  for (let i = 0; i < serverShims.length; i++) {
+    const shim = serverShims[i]
+    const alias = `ServerShim_${i}`
+    const relativePath = path.relative(basePath, shim.path).replace(/\\/g, "/")
+    imports.push(`import * as ${alias} from "./${relativePath}"`)
+    for (const func of shim.exportedFunctions) {
+      routerFunction.push(`  router.addRoute("POST", "/api/__rpc/${i}/${func.name}", async (req) => { req.send(superjson.stringify(await ${alias}.${func.name}(...(superjson.parse(req.rawBody().toString()).args))))})`)
+    }
+  }
 
   // Add page route registrations with head stacks
   function generatePageRouteRegistrations(node: RouteNode<string>, currentPath: string = "", accumulatedHeads: string[] = []) {
@@ -618,7 +631,7 @@ export const buildForProduction = async (basePath: string, distFolder: string, m
     : { staticChildren: new Map(), accept: false, names: {}, stacks: {} } as RouteNode<string>
 
   // Generate backend server code
-  const backendCode = generateBackendServerCode(backend, headStacks, frontend, basePath, assetPath)
+  const backendCode = generateBackendServerCode(backend, headStacks, frontend, basePath, assetPath, result.serverShims ?? [])
 
   // Write backend code
   await bundleBackendProgram({
