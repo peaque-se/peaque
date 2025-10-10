@@ -630,12 +630,13 @@ export const buildForProduction = async (basePath: string, distFolder: string, m
   })
 
   // Create main.js with env loading
-  const pathToOutputFromBundle = path.relative(intermediateBundleFolder, outDir).replace(/\\/g, "/")
+  let pathToOutputFromBundle = path.relative(intermediateBundleFolder, outDir).replace(/\\/g, "/")
+  if (!pathToOutputFromBundle.startsWith(".") && !pathToOutputFromBundle.startsWith("/")) pathToOutputFromBundle = "./" + pathToOutputFromBundle
   const mainJs = `import dotenv from "dotenv"
 const currentPath = process.cwd()
 dotenv.config({path: \`\${currentPath}/.env\`, override: true})
 dotenv.config()
-require("${pathToOutputFromBundle == "" ? "." : pathToOutputFromBundle}/server_without_env.cjs")`
+require("${pathToOutputFromBundle === "" ? "." : pathToOutputFromBundle}/server_without_env.cjs")`
 
   await bundleBackendProgram({
     baseDir: intermediateBundleFolder,
