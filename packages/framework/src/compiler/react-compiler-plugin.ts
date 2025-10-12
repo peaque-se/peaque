@@ -5,6 +5,7 @@
 import { Plugin } from "esbuild"
 import { transformSync } from "@babel/core"
 import reactCompiler from "babel-plugin-react-compiler"
+import { realFileSystem } from "../filesystem/index.js"
 
 interface ReactCompilerOptions {
   enabled?: boolean
@@ -39,8 +40,7 @@ export function reactCompilerPlugin(options: ReactCompilerOptions = {}): Plugin 
           return null
         }
 
-        const fs = await import("fs")
-        const contents = await fs.promises.readFile(args.path, "utf8")
+        const contents = await realFileSystem.readFileText(args.path, "utf8")
 
         try {
           // Use Babel to transform the code with React Compiler

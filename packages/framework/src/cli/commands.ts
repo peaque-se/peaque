@@ -1,7 +1,8 @@
-import fs from "fs"
 import path from "path"
 import { buildForProduction } from "../compiler/prod-builder.js"
 import { DevServer } from "../server/dev-server.js"
+import { realFileSystem } from "../filesystem/index.js"
+import type { FileSystem } from "../filesystem/file-system.js"
 
 export interface DevCommandOptions {
   basePath: string
@@ -29,6 +30,7 @@ export interface RuntimeDependencies {
   spawn: typeof import("child_process").spawn
   exit: (code?: number) => never
   onSigint: (handler: () => void) => void
+  fileSystem?: FileSystem
 }
 
 export async function devCommand(
@@ -77,9 +79,10 @@ export async function startCommand(
   const { spawn: spawnFn = (await import("child_process")).spawn } = deps || {}
   const exit = deps?.exit || ((code?: number) => process.exit(code))
   const onSigint = deps?.onSigint || ((handler: () => void) => process.on("SIGINT", handler))
+  const fileSystem = deps?.fileSystem || realFileSystem
 
-  const inDist = fs.existsSync(path.join(options.basePath, "dist", "main.cjs"))
-  const inSrc = fs.existsSync(path.join(options.basePath, "main.cjs"))
+  const inDist = fileSystem.existsSync(path.join(options.basePath, "dist", "main.cjs"))
+  const inSrc = fileSystem.existsSync(path.join(options.basePath, "main.cjs"))
   const cwd = inDist ? path.join(options.basePath, "dist") : options.basePath
 
   if (!inDist && !inSrc) {

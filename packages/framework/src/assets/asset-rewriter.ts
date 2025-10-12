@@ -1,26 +1,26 @@
 // Rewrites asset references in compiled code to use cache-busted paths
-import { promises as fs } from "fs"
-import { join } from "path"
+import { type FileSystem, realFileSystem } from "../filesystem/index.js"
 
 /**
  * Scans a folder recursively and returns a set of all file paths relative to the folder
  */
-async function getPublicAssetPaths(folderPath: string): Promise<Set<string>> {
+async function getPublicAssetPaths(folderPath: string, fileSystem: FileSystem): Promise<Set<string>> {
   const assets = new Set<string>()
 
   async function scanFiles(dir: string, basePath: string = ""): Promise<void> {
     try {
-      const entries = await fs.readdir(dir, { withFileTypes: true })
+      const entries = await fileSystem.readdirEntries(dir)
       for (const entry of entries) {
-        const fullPath = join(dir, entry.name)
+        const fullPath = entry.path
         const relativePath = basePath ? `${basePath}/${entry.name}` : entry.name
+        const normalizedRelativePath = relativePath.replace(/\\/g, "/")
 
         if (entry.isDirectory()) {
-          await scanFiles(fullPath, relativePath)
+          await scanFiles(fullPath, normalizedRelativePath)
         } else if (entry.isFile()) {
           // Skip compressed variants
           if (!entry.name.endsWith('.gz') && !entry.name.endsWith('.br')) {
-            assets.add(`/${relativePath}`)
+            assets.add(`/${normalizedRelativePath}`)
           }
         }
       }
@@ -75,9 +75,10 @@ export function rewriteAssetReferences(code: string, assetPaths: Set<string>, as
 export async function rewritePublicAssetReferences(
   code: string,
   publicFolderPath: string,
-  assetPrefix: string
+  assetPrefix: string,
+  fileSystem: FileSystem = realFileSystem
 ): Promise<string> {
-  const assetPaths = await getPublicAssetPaths(publicFolderPath)
+  const assetPaths = await getPublicAssetPaths(publicFolderPath, fileSystem)
 
   if (assetPaths.size === 0) {
     return code // No assets to rewrite

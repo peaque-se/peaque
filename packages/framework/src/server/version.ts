@@ -1,7 +1,9 @@
 import path from "path"
-import { promises as fs } from "fs"
 import { fileURLToPath } from "url"
+import { realFileSystem } from "../filesystem/index.js"
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-export const platformVersion = JSON.parse(await fs.readFile(path.join(__dirname, "..", "..", "package.json"), "utf-8")).version
+const versionFilename = fileURLToPath(import.meta.url)
+const versionDirname = path.dirname(versionFilename)
+const packageJsonPath = path.join(versionDirname, "..", "..", "package.json")
+const packageJson = JSON.parse(realFileSystem.readFileSync(packageJsonPath, "utf-8") as string)
+export const platformVersion = packageJson.version

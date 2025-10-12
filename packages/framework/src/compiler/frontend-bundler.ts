@@ -4,11 +4,11 @@
 ///
 
 import { BuildContext, BuildResult, context, PluginBuild, OnLoadArgs } from "esbuild"
-import * as fs from "fs"
 import * as path from "path"
 import { frameworkDepsPlugin } from "./backend-bundler.js"
 import { reactCompilerPlugin } from "./react-compiler-plugin.js"
 import { makeRpcShim, ServerShim } from "../server/make-rpc.js"
+import { type FileSystem, realFileSystem } from "../filesystem/index.js"
 
 export interface FrontendBuildOptions {
   entryFile?: string // Optional when entryContent is provided
@@ -25,6 +25,7 @@ export interface FrontendBuildOptions {
   writeToFile?: boolean
   /** Enable React Compiler for automatic optimizations (default: true in production) */
   reactCompiler?: boolean
+  fileSystem?: FileSystem // Custom file system (for testing or virtual FS)
 }
 
 export interface DependencyInfo {
@@ -126,9 +127,11 @@ export class FrontendBundler {
   private context: BuildContext | null = null
   private lastResult: BuildResult | null = null
   private serverShims: Array<ServerShim> = []
+  private fileSystem: FileSystem
 
   constructor(options: FrontendBuildOptions) {
     this.options = { ...options }
+    this.fileSystem = options.fileSystem ?? realFileSystem
   }
 
   /**
@@ -136,6 +139,9 @@ export class FrontendBundler {
    */
   updateOptions(newOptions: Partial<FrontendBuildOptions>): void {
     this.options = { ...this.options, ...newOptions }
+    if (newOptions.fileSystem) {
+      this.fileSystem = newOptions.fileSystem
+    }
   }
 
   /**
@@ -160,8 +166,8 @@ export class FrontendBundler {
     // Ensure output directory exists when writing to file
     if (writeToFile && outputFile) {
       const outputDir = path.dirname(outputFile)
-      if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true })
+      if (!this.fileSystem.existsSync(outputDir)) {
+        this.fileSystem.mkdirSync(outputDir, { recursive: true })
       }
     }
 
@@ -182,7 +188,7 @@ export class FrontendBundler {
       name: 'use-server-plugin',
       setup: (build: PluginBuild) => {
         build.onLoad({ filter: /\.tsx?$/, namespace: 'file' }, async (args: OnLoadArgs) => {
-          const contents = (await fs.promises.readFile(args.path, 'utf8')).trim();
+          const contents = (await this.fileSystem.readFileText(args.path, "utf8")).trim();
           if (contents.startsWith('"use server"') || contents.startsWith("'use server'")) {
             const { shim, exportedFunctions } = await makeRpcShim(contents, String(this.serverShims.length));
             this.serverShims.push({ shim, path: args.path, exportedFunctions });

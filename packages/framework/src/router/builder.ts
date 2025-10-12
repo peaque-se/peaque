@@ -1,5 +1,5 @@
 import { RouteNode } from "./router.js"
-import { FileSystem, RealFileSystem } from "./utils.js"
+import { type FileSystem, realFileSystem } from "../filesystem/index.js"
 
 function validateExcludes(node: RouteNode) {
   const excludedPages = [...node.staticChildren.values()]
@@ -53,16 +53,20 @@ export interface RouteFileConfig {
   accept?: boolean
 }
 
+function adaptFileSystem(fs?: FileSystem): FileSystem {
+  return fs || realFileSystem
+}
+
 function walkDirectory(
   fs: FileSystem,
   dir: string,
   node: RouteNode,
   config: RouteFileConfig[]
 ) {
-  const entries = fs.readDirectory(dir)
+  const entries = fs.readdirEntriesSync(dir)
 
   for (const entry of entries) {
-    if (entry.isDirectory) {
+    if (entry.isDirectory()) {
       const seg = parseSegment(entry.name)
 
       let child: RouteNode
@@ -89,7 +93,7 @@ function walkDirectory(
       }
 
       walkDirectory(fs, entry.path, child, config)
-    } else if (entry.isFile) {
+    } else if (entry.isFile()) {
       // Check if this file matches any configured patterns
       for (const fileConfig of config) {
         if (entry.name === fileConfig.pattern) {
@@ -111,7 +115,11 @@ function walkDirectory(
 }
 
 export function buildRouter(rootDir: string, config?: RouteFileConfig[]): RouteNode
-export function buildRouter(rootDir: string, config: RouteFileConfig[], fs: FileSystem): RouteNode
+export function buildRouter(
+  rootDir: string,
+  config: RouteFileConfig[],
+  fs: FileSystem
+): RouteNode
 /**
  * Builds a route tree from a directory structure.
  *
@@ -125,15 +133,19 @@ export function buildRouter(rootDir: string, config: RouteFileConfig[], fs: File
  * import { buildRouter, MockFileSystem } from './builder.js'
  *
  * const mockFs = new MockFileSystem()
- * mockFs.addDirectory('/pages', [
- *   { name: 'page.tsx', isFile: true, isDirectory: false, path: '/pages/page.tsx' }
- * ])
+ * mockFs.addFiles({
+ *   '/pages/page.tsx': 'export default function Page() {}'
+ * })
  *
  * const router = buildRouter('/pages', [{ pattern: 'page.tsx', property: 'page', stacks: false, accept: true }], mockFs)
  * ```
  */
-export function buildRouter(rootDir: string, config: RouteFileConfig[] = [], fs?: FileSystem): RouteNode {
-  const fileSystem = fs || new RealFileSystem()
+export function buildRouter(
+  rootDir: string,
+  config: RouteFileConfig[] = [],
+  fs?: FileSystem
+): RouteNode {
+  const fileSystem = adaptFileSystem(fs)
   const root = createNode()
 
   walkDirectory(fileSystem, rootDir, root, config)

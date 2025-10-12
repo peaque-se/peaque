@@ -1,13 +1,8 @@
 import chokidar from "chokidar"
 import { config } from "dotenv"
-import { accessSync, existsSync, promises as fs, readFileSync, statSync } from "fs"
-import path, { basename, extname } from "path"
+import path from "path"
 import colors from "yoctocolors"
-import { contentTypeRegistry } from "../assets/asset-handler.js"
-import { bundleModuleFromNodeModules, setBaseDependencies } from "../compiler/bundle.js"
-import { fastRefreshify } from "../compiler/fast-refreshify.js"
-import { makeImportsRelative, setupImportAliases } from "../compiler/imports.js"
-import { bundleCssFile } from "../compiler/tailwind-bundler.js"
+import { setupImportAliases } from "../compiler/imports.js"
 import { setupSourceMaps } from "../exceptions/sourcemaps.js"
 import { hmrConnectHandler, notifyConnectedClients } from "../hmr/hmr-handler.js"
 import { ModuleLoader } from "../hmr/module-loader.js"
@@ -15,105 +10,22 @@ import { executeMiddlewareChain } from "../http/http-router.js"
 import { HttpServer } from "../http/http-server.js"
 import { PeaqueRequest, RequestHandler } from "../http/http-types.js"
 import { JobsRunner } from "../jobs/jobs-runner.js"
-import { buildRouter, RouteFileConfig } from "../router/builder.js"
-import { match, RouteNode } from "../router/router.js"
-import { serializeRouterToJs } from "../router/serializer.js"
 import { FileCache } from "./file-cache.js"
 import { platformVersion } from "./version.js"
-import { makeRpcShim } from "./make-rpc.js"
-import * as superjson from "superjson"
-
-const pageRouterConfig: RouteFileConfig[] = [
-  { pattern: "page.tsx", property: "page", stacks: false, accept: true },
-  { pattern: "layout.tsx", property: "layout", stacks: true },
-  { pattern: "guard.ts", property: "guards", stacks: true },
-  { pattern: "head.ts", property: "heads", stacks: true },
-  { pattern: "middleware.ts", property: "middleware", stacks: false },
-]
-
-const apiRouterConfig: RouteFileConfig[] = [
-  { pattern: "route.ts", property: "handler", stacks: false, accept: true },
-  { pattern: "middleware.ts", property: "middleware", stacks: true },
-]
-
-function componentify(router: RouteNode<string>, baseDir: string): Set<string> {
-  const imports = new Set<string>()
-
-  function getComponentName(filePath: string): string {
-    const relativePath = path.relative(baseDir, filePath)
-    const componentName = relativePath
-      .replace(/[^a-zA-Z0-9]/g, " ") // Replace non-alphanumeric characters with space
-      .split(" ") // Split by space
-      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)) // Capitalize first letter
-      .join("") // Join back without spaces
-    return componentName
-  }
-
-  function traverse(node: RouteNode<string>) {
-    // Convert names to component names
-    if (node.names) {
-      for (const key in node.names) {
-        const name = node.names[key]
-        const componentName = getComponentName(name)
-        node.names[key] = componentName
-        const filename = path.relative(baseDir, name)
-        imports.add(`import ${componentName} from "./src/pages/${filename.replace(/\\/g, "/")}";`)
-      }
-    }
-    // Convert stacks to component names
-    if (node.stacks) {
-      for (const key in node.stacks) {
-        node.stacks[key] = node.stacks[key].map((name: string) => {
-          const componentName = getComponentName(name)
-          const filename = path.relative(baseDir, name)
-          imports.add(`import ${componentName} from "./src/pages/${filename.replace(/\\/g, "/")}";`)
-          return componentName
-        })
-      }
-    }
-    for (const child of node.staticChildren.values()) {
-      traverse(child)
-    }
-    if (node.paramChild) {
-      traverse(node.paramChild)
-    }
-    if (node.wildcardChild) {
-      traverse(node.wildcardChild)
-    }
-  }
-
-  traverse(router)
-  return imports
-}
-
-function checkSpecialPage(pagesDir: string, fileName: string): string | null {
-  const filePath = path.join(pagesDir, fileName)
-  if (existsSync(filePath)) {
-    const relativePath = path.relative(pagesDir, filePath).replace(/\\/g, "/")
-    let componentName: string
-    if (fileName === "loading.tsx") componentName = "Loading"
-    else if (fileName === "404.tsx") componentName = "Missing"
-    else if (fileName === "error.tsx") componentName = "Error"
-    else if (fileName === "403.tsx") componentName = "AccessDenied"
-    else componentName = relativePath.replace(/[^a-zA-Z0-9]/g, "_").replace(/^_+|_+$/g, "")
-    return componentName
-  }
-  return null
-}
-
-function safeBuildRouter(dirPath: string, config: RouteFileConfig[]): RouteNode<string> {
-  if (existsSync(dirPath)) {
-    return buildRouter(dirPath, config) as RouteNode<string>
-  }
-  // Return empty router if directory doesn't exist
-  return { staticChildren: new Map(), names: {}, stacks: {}, accept: false }
-}
+import { loadBackendRouter, loadFrontendState, FrontendState } from "./dev-server-state.js"
+import { createDevRouterModule } from "./dev-server-view.js"
+import { handleBackendApiRequest } from "./dev-server-api.js"
+import { serveSourceModule, handleRpcRequest, ModuleContext } from "./dev-server-modules.js"
+import { servePeaqueCss, servePeaqueMainHtml, servePeaqueMainScript, servePeaqueLoaderScript, servePublicAsset } from "./dev-server-static.js"
+import type { RouteNode } from "../router/router.js"
+import { type FileSystem, realFileSystem } from "../filesystem/index.js"
 
 export interface DevServerOptions {
   basePath: string
   port: number
   noStrict: boolean
   fullStackTrace?: boolean
+  fileSystem?: FileSystem
 }
 
 /// fifteenth attempt at a dev server that reloads even better, but is still fast
@@ -122,43 +34,30 @@ export class DevServer {
   private port: number
   private noStrict: boolean
   private server: HttpServer
-  private frontend: RouteNode<string>
-  private frontendImports: Set<string>
-  private backend: RouteNode<string>
+  private frontendState: FrontendState
+  private backendRouter: RouteNode<string>
   private moduleCache: FileCache<any> = new FileCache()
   private moduleLoader: ModuleLoader
   private jobsRunner: JobsRunner
   private watcher: chokidar.FSWatcher | undefined
   private handler: RequestHandler = this.requestHandler.bind(this)
-  private loadingPage: string | null = null
-  private missingPage: string | null = null
-  private errorPage: string | null = null
-  private accessDeniedPage: string | null = null
+  private readonly fileSystem: FileSystem
 
-  constructor({ basePath, port, noStrict, fullStackTrace = false }: DevServerOptions) {
+  constructor({ basePath, port, noStrict, fullStackTrace = false, fileSystem = realFileSystem }: DevServerOptions) {
     this.basePath = basePath
     this.port = port
     this.noStrict = noStrict
     this.server = new HttpServer((r) => this.handler(r))
-    this.moduleLoader = new ModuleLoader({ absWorkingDir: basePath })
-    this.jobsRunner = new JobsRunner(basePath)
+    this.fileSystem = fileSystem
+    this.moduleLoader = new ModuleLoader({ absWorkingDir: basePath, fileSystem: this.fileSystem })
+    this.jobsRunner = new JobsRunner(basePath, this.fileSystem)
 
-    this.frontend = safeBuildRouter(this.basePath + "/src/pages", pageRouterConfig)
-    this.frontendImports = componentify(this.frontend, this.basePath + "/src/pages")
-    this.backend = safeBuildRouter(this.basePath + "/src/api", apiRouterConfig)
-
-    // Check for special pages
-    const pagesDir = this.basePath + "/src/pages"
-    if (existsSync(pagesDir)) {
-      this.loadingPage = checkSpecialPage(pagesDir, "loading.tsx")
-      this.missingPage = checkSpecialPage(pagesDir, "404.tsx")
-      this.errorPage = checkSpecialPage(pagesDir, "error.tsx")
-      this.accessDeniedPage = checkSpecialPage(pagesDir, "403.tsx")
-    }
+    this.frontendState = loadFrontendState(this.basePath, this.fileSystem)
+    this.backendRouter = loadBackendRouter(this.basePath, this.fileSystem)
 
     const tsconfigPath = path.join(basePath, "tsconfig.json")
-    if (existsSync(tsconfigPath)) {
-      const tsconfigContent = readFileSync(tsconfigPath, "utf-8")
+    if (this.fileSystem.existsSync(tsconfigPath)) {
+      const tsconfigContent = this.fileSystem.readFileSync(tsconfigPath, "utf-8") as string
       try {
         const tsconfigJson = JSON.parse(tsconfigContent)
         setupImportAliases(tsconfigJson)
@@ -167,13 +66,13 @@ export class DevServer {
       }
     }
 
-    setBaseDependencies(basePath)
+    // setBaseDependencies(basePath, this.fileSystem)
 
     if (!fullStackTrace) {
       setupSourceMaps()
     }
 
-    if (existsSync(path.join(basePath, "src/middleware.ts"))) {
+    if (this.fileSystem.existsSync(path.join(basePath, "src/middleware.ts"))) {
       this.moduleLoader
         .loadExport(path.relative(basePath, path.join(basePath, "src/middleware.ts")).replace(/\\/g, "/"), "middleware")
         .then((mw) => {
@@ -216,7 +115,7 @@ export class DevServer {
   }
   private async runStartup() {
     const startupFile = path.join(this.basePath, "src", "startup.ts")
-    if (existsSync(startupFile)) {
+    if (this.fileSystem.existsSync(startupFile)) {
       await this.moduleLoader.loadModule(path.relative(this.basePath, startupFile).replace(/\\/g, "/"))
       console.log(`     ${colors.green("✓")} Executed startup script from src/startup.ts`)
     }
@@ -231,81 +130,21 @@ export class DevServer {
   }
 
   private async requestHandler(req: PeaqueRequest) {
-    const path = req.path()
-    // console.log(`Request for ${path}`)
-
-    // if path starts with /@deps/, serve from node_modules
-    if (path.startsWith("/@deps/")) {
-      return await this.serveBundledModule(req)
-    }
-
-    // if path starts with /@src/, serve from src directory with import aliasing
-    if (path.startsWith("/@src/")) {
-      return await this.serveBundledSrcFile(req)
-    }
-
-    // if path starts with /api/__rpc/, handle RPC requests
-    if (path.startsWith("/api/__rpc/")) {
-     return await this.handleRpcRequest(req)
-    }
-
-    // if path starts with /api/, handle API requests
-    if (path.startsWith("/api/")) {
-      return await this.handleBackendApiRequest(req)
-    }
-
-    // if the path is /peaque-dev.js, serve the Peaque main file
-    if (path === "/peaque-dev.js") {
-      return this.servePeaqueMain(req)
-    }
-
-    // if the path is /peaque-loader.js, serve the Peaque loader file
-    if (path == "/peaque-loader.js") {
-      return await this.servePeaqueApplicationMain(req)
-    }
-
-    // it the path is /peaque.js, serve the bundled Peaque application
-    if (path === "/peaque.js") {
-      return await this.sendMainRouter(req)
-    }
-
-    // if the path is /peaque.css, serve the Peaque CSS
-    if (path === "/peaque.css") {
-      return await this.servePeaqueCss(req)
-    }
-
-    if (path === "/hmr") {
-      return hmrConnectHandler(req)
-    }
-
-    // if the file exists in the public directory, serve it
-    if (this.fileExistsInPublicDir(path)) {
-      return this.serveFileFromPublicDir(req)
-    }
-
-    // otherwise, serve the main application page
-    return await this.serveMainPage(req)
-  }
-  
-  private async handleRpcRequest(req: PeaqueRequest) {
-    const rpcPath = req.path().substring(11) // remove /api/__rpc/
-    const firstSlash = rpcPath.lastIndexOf("/")
-    const moduleName = rpcPath.substring(0, firstSlash)
-    const functionName = rpcPath.substring(firstSlash + 1)
-    const modulePath = path.join(this.basePath, moduleName).replace(/\\/g, "/")
-    const module = await this.moduleCache.cacheByHash(modulePath, async () => {
-      return await this.moduleLoader.loadModule(moduleName)
+    await handleDevServerRequest(req, {
+      basePath: this.basePath,
+      port: this.port,
+      noStrict: this.noStrict,
+      frontendState: this.frontendState,
+      backendRouter: this.backendRouter,
+      moduleContext: this.moduleContext(),
+      fileSystem: this.fileSystem,
     })
-    const func = module[functionName]
-    const { args } = superjson.parse(req.rawBody()?.toString()||"{}") as { args: any[] }
-    const result = await func(...args)
-    req.type("application/json").send(superjson.stringify(result))
   }
 
   private watchSourceFiles() {
     const srcDir = this.basePath + "/src"
     // Only watch if src directory exists
-    if (!existsSync(srcDir)) {
+    if (!this.fileSystem.existsSync(srcDir)) {
       return
     }
     // watch the src directory recursively for changes to .ts, .tsx, .js, .jsx files with chokidar
@@ -316,292 +155,112 @@ export class DevServer {
       persistent: true,
     })
 
-    this.watcher.on("all", (event, path) => {
-      if (path.endsWith(".tsx")) {
-        notifyConnectedClients({ event, path: path.replace(".tsx", "") }, path)
-      } else {
-        if (path.startsWith("src/pages/")) {
-          this.frontend = safeBuildRouter(this.basePath + "/src/pages", pageRouterConfig)
-          this.frontendImports = componentify(this.frontend, this.basePath + "/src/pages")
-          // Re-check special pages when pages directory changes
-          const pagesDir = this.basePath + "/src/pages"
-          if (existsSync(pagesDir)) {
-            this.loadingPage = checkSpecialPage(pagesDir, "loading.tsx")
-            this.missingPage = checkSpecialPage(pagesDir, "404.tsx")
-            this.errorPage = checkSpecialPage(pagesDir, "error.tsx")
-            this.accessDeniedPage = checkSpecialPage(pagesDir, "403.tsx")
-          } else {
-            this.loadingPage = null
-            this.missingPage = null
-            this.errorPage = null
-            this.accessDeniedPage = null
-          }
-          notifyConnectedClients({ event, path: "/peaque.js" }, "<main router>")
-        } else if (path.startsWith("src/api/")) {
-          this.backend = safeBuildRouter(this.basePath + "/src/api", apiRouterConfig)
-        } else if (path.startsWith("src/jobs/")) {
-          this.jobsRunner.startOrUpdateJobs()
-        }
-      }
-    })
-  }
-
-  private async handleBackendApiRequest(req: PeaqueRequest) {
-    const matchResult = match(req.path().substring(4), this.backend) // remove /api
-    if (!matchResult) {
-      req.code(404).send("Not Found")
-      return
-    }
-    const moduleFile = matchResult.names.handler
-    matchResult.params && Object.keys(matchResult.params).forEach((k) => req.setPathParam(k, matchResult.params[k]))
-
-    const middlewares = matchResult.stacks.middleware ? await Promise.all(
-      matchResult.stacks.middleware.map(
-        async (middlewareFile) =>
-          await this.moduleCache.cacheByHash(middlewareFile, async () => {
-            const module = path.relative(this.basePath, middlewareFile).replace(/\\/g, "/")
-            return await this.moduleLoader.loadExport(module, "middleware")
-          })
-      )
-    ) : []
-
-    const api = await this.moduleCache.cacheByHash(moduleFile, async () => {
-      const module = path.relative(this.basePath, moduleFile).replace(/\\/g, "/")
-      return await this.moduleLoader.loadModule(module)
-    })
-    const handler = api[req.method().toUpperCase()]
-    if (!handler || typeof handler !== "function") {
-      req.code(500).send("No handler for this method")
-      return
-    }
-    return await executeMiddlewareChain(req, middlewares, handler)
-  }
-
-  private async serveBundledSrcFile(req: PeaqueRequest) {
-    const srcPath = path.normalize(req.path().substring(5)) // remove /@src/ and normalize
-    const extensions = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js", "/index.jsx"]
-    const resolvedBasePath = path.resolve(this.basePath)
-
-    const fullPath = extensions
-      .map((ext) => path.join(this.basePath, srcPath + ext))
-      .map((p) => path.resolve(p))
-      .find((p) => {
-        // Validate that the resolved path is within the base directory
-        if (!p.startsWith(resolvedBasePath + path.sep) && p !== resolvedBasePath) {
-          return false
-        }
-        return existsSync(p) && statSync(p).isFile()
-      })
-
-    if (!fullPath) {
-      console.error(`File not found: ${srcPath} (tried with extensions: ${extensions.join(", ")})`)
-      req.code(404).send("File not found")
-      return
-    }
-
-    try {
-      const srcContent = readFileSync(fullPath, "utf-8")
-      if (srcContent.startsWith("'use server'") || srcContent.startsWith('"use server"')) {
-        const { shim } = await makeRpcShim(srcContent, fullPath.substring(this.basePath.length + 1).replace(/\\/g, "/"))
-        const shimWithImports = makeImportsRelative(shim, fullPath.substring(this.basePath.length + 1))
-        req.type("application/javascript").send(shimWithImports)
+    this.watcher.on("all", (event, changedPath) => {
+      if (changedPath.endsWith(".tsx")) {
+        notifyConnectedClients({ event, path: changedPath.replace(".tsx", "") }, changedPath)
         return
       }
-      const refreshifyContent = fastRefreshify(srcContent, srcPath)
-      const processedContents = makeImportsRelative(refreshifyContent, fullPath.substring(this.basePath.length + 1))
-      req.type("application/javascript").send(processedContents)
-    } catch (err) {
-      const errorContents = `console.error("Error loading module ${srcPath}:", ${JSON.stringify(err instanceof Error ? err.message : String(err))})\n
-          throw new Error(${JSON.stringify(err instanceof Error ? err.message : String(err))})\n
-          export default function() {}
-          `
-      req.type("application/javascript").send(errorContents)
-    }
+
+      if (changedPath.startsWith("src/pages/")) {
+        this.frontendState = loadFrontendState(this.basePath, this.fileSystem)
+        notifyConnectedClients({ event, path: "/peaque.js" }, "<main router>")
+        return
+      }
+
+      if (changedPath.startsWith("src/api/")) {
+        this.backendRouter = loadBackendRouter(this.basePath, this.fileSystem)
+        return
+      }
+
+      if (changedPath.startsWith("src/jobs/")) {
+        this.jobsRunner.startOrUpdateJobs()
+      }
+    })
   }
 
-  private async sendMainRouter(req: PeaqueRequest) {
-    const result: string[] = []
-    result.push(`// Auto-generated by Peaque Dev Server`)
-    result.push(`// Do not edit this file directly\n`)
-    if (!this.noStrict) {
-      result.push(`import { StrictMode } from "react"`)
-    }
-    result.push(`import { Router } from "@peaque/framework"`)
-    result.push(...Array.from(this.frontendImports))
 
-    // Add imports for special pages
-    if (this.loadingPage) {
-      result.push(`import ${this.loadingPage} from "./src/pages/loading.tsx";`)
-    }
-    if (this.missingPage) {
-      result.push(`import ${this.missingPage} from "./src/pages/404.tsx";`)
-    }
-    if (this.errorPage) {
-      result.push(`import ${this.errorPage} from "./src/pages/error.tsx";`)
-    }
-    if (this.accessDeniedPage) {
-      result.push(`import ${this.accessDeniedPage} from "./src/pages/403.tsx";`)
-    }
 
-    result.push(serializeRouterToJs(this.frontend, true))
-    result.push(`const conf = {`)
-    result.push(`  root: router,`)
-
-    // Add special page props to configuration
-    if (this.loadingPage) {
-      result.push(`  loading: <${this.loadingPage} />,`)
+  public moduleContext(): ModuleContext {
+    return {
+      basePath: this.basePath,
+      moduleLoader: this.moduleLoader,
+      moduleCache: this.moduleCache,
+      fileSystem: this.fileSystem,
     }
-    if (this.missingPage) {
-      result.push(`  missing: <${this.missingPage} />,`)
-    }
-    if (this.errorPage) {
-      result.push(`  error: <${this.errorPage} />,`)
-    }
-    if (this.accessDeniedPage) {
-      result.push(`  accessDenied: <${this.accessDeniedPage} />,`)
-    }
-
-    result.push(`}`)
-    result.push(`export default function() {`)
-    if (this.noStrict) {
-      result.push(`  return <Router {...conf} />`)
-    } else {
-      result.push(`  return <StrictMode><Router {...conf} /></StrictMode>`)
-    }
-    result.push(`}`)
-
-    const js = result.join("\n")
-    const refreshifyContent = fastRefreshify(js, "peaque.tsx")
-    const processedContents = makeImportsRelative(refreshifyContent)
-
-    req.type("application/javascript").send(processedContents)
   }
+}
 
-  private async servePeaqueApplicationMain(req: PeaqueRequest) {
-    const loaderContent = `
-          import { createRoot } from 'react-dom/client';
-          import MainApplication from './peaque.js';
-          createRoot(document.getElementById('peaque')!).render(<MainApplication />);`
-    const refreshifyContent = fastRefreshify(loaderContent, "peaque-loader.js")
-    const processedContents = makeImportsRelative(refreshifyContent).replace("/@src/peaque", "/peaque.js")
-    // set the content type to application/javascript
-    req.type("application/javascript").send(processedContents)
-  }
+export interface DevServerRequestContext {
+  basePath: string
+  port: number
+  noStrict: boolean
+  frontendState: FrontendState
+  backendRouter: RouteNode<string>
+  moduleContext: ModuleContext
+  fileSystem: FileSystem
+}
 
-  private async serveBundledModule(req: PeaqueRequest) {
+export async function handleDevServerRequest(req: PeaqueRequest, context: DevServerRequestContext): Promise<void> {
+  const requestPath = req.path()
+
+  if (requestPath.startsWith("/@deps/")) {
+    const { bundleModuleFromNodeModules } = await import("../compiler/bundle.js")
     const path = req.path()
     const module = path.replace("/@deps/", "")
-    const contents = await bundleModuleFromNodeModules(module, this.basePath)
+    const contents = await bundleModuleFromNodeModules(module, context.basePath, context.fileSystem)
     req.code(200).header("Content-Type", "application/javascript").send(contents)
+    return
   }
 
-  private servePeaqueMain(req: PeaqueRequest) {
-    const js = `
-      import * as runtime from "/@deps/react-refresh/runtime"
-      runtime.injectIntoGlobalHook(window)
-      window.$RefreshReg$ = (file) => (code, id) => {
-        runtime.register(code, file + "-" + id)
-      }
-      window.$RefreshSig$ = runtime.createSignatureFunctionForTransform
-      window.performReactRefresh = runtime.performReactRefresh
-
-      import("/peaque-loader.js?t=" + Date.now())
-
-      const sheet = new CSSStyleSheet()
-      document.adoptedStyleSheets = [sheet]
-      async function replaceStylesheet(url) {
-        const css = await (await fetch(url)).text()
-        await sheet.replace(css)
-      }
-      replaceStylesheet("/peaque.css")
-      window.replaceStylesheet = replaceStylesheet
-if (typeof window !== 'undefined') {
-  let reconnectAttempts = 0;
-  const maxAttempts = 5;
-
-  function connect() {
-    const ws = new WebSocket('ws://localhost:${this.port}/hmr');
-    ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      replaceStylesheet("/style.css")
-      const updatedFile = message.data.path
-      let updatePath = "/@src/" + updatedFile + "?t=" + Date.now()
-      if (updatedFile === "/peaque.js") {
-        updatePath = "/peaque.js?t=" + Date.now()
-      }
-      import(updatePath).then((mod) => {
-        //console.log("HMR: Successfully re-imported updated module:", updatedFile, mod);
-        window.performReactRefresh();
-      }).catch((err) => {
-        console.error("HMR: Error re-importing updated module:", updatedFile, err);
-      });
-      console.log("HMR message:", message.data.path);
-
-    };
-    ws.onclose = () => {
-      if (reconnectAttempts++ < maxAttempts) setTimeout(connect, 1000);
-    };
-  }
-  connect();
-}`
-    req.code(200).header("Content-Type", "application/javascript").send(js)
+  if (requestPath.startsWith("/@src/")) {
+    await serveSourceModule(req, context.moduleContext)
+    return
   }
 
-  private serveFileFromPublicDir(req: PeaqueRequest) {
-    const publicDir = path.join(this.basePath, "src", "public")
-    const requestedPath = path.normalize(req.path())
-    const absFile = path.join(publicDir, requestedPath)
-
-    // Validate that the resolved path is within the public directory
-    const resolvedPath = path.resolve(absFile)
-    const resolvedPublicDir = path.resolve(publicDir)
-    if (!resolvedPath.startsWith(resolvedPublicDir + path.sep) && resolvedPath !== resolvedPublicDir) {
-      req.code(403).send("Forbidden")
-      return
-    }
-
-    const contents = readFileSync(absFile)
-    const contentType = contentTypeRegistry[extname(basename(absFile))] || "application/octet-stream"
-    req.code(200).header("Content-Type", contentType).send(contents)
+  if (requestPath.startsWith("/api/__rpc/")) {
+    await handleRpcRequest(req, context.moduleContext)
+    return
   }
 
-  private fileExistsInPublicDir(path: string): boolean {
-    const absFile = this.basePath + "/src/public" + path
-    try {
-      const stats = statSync(absFile)
-      if (!stats.isFile()) return false
-      accessSync(absFile, fs.constants.R_OK)
-      return true
-    } catch {
-      return false
-    }
+  if (requestPath.startsWith("/api/")) {
+    await handleBackendApiRequest(req, {
+      backendRouter: context.backendRouter,
+      basePath: context.basePath,
+      moduleCache: context.moduleContext.moduleCache,
+      moduleLoader: context.moduleContext.moduleLoader,
+    })
+    return
   }
 
-  private async servePeaqueCss(req: PeaqueRequest) {
-    const stylesPath = this.basePath + "/src/styles.css"
-    let css = ""
-    if (existsSync(stylesPath)) {
-      css = readFileSync(stylesPath, "utf-8")
-    }
-    const bundle = await bundleCssFile(css, this.basePath)
-    req.code(200).header("Content-Type", "text/css").send(bundle)
+  if (requestPath === "/peaque-dev.js") {
+    servePeaqueMainScript(req, context.port)
+    return
   }
 
-  private async serveMainPage(req: PeaqueRequest) {
-    req.code(200).header("Content-Type", "text/html").send(`
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Peaque App</title>
-        <link rel="stylesheet" href="/peaque.css" />
-        <script type="module" src="/peaque-dev.js"></script>
-      </head>
-      <body>
-        <div id="peaque"></div>
-      </body>
-      </html>
-    `)
+  if (requestPath === "/peaque-loader.js") {
+    servePeaqueLoaderScript(req)
+    return
   }
+
+  if (requestPath === "/peaque.js") {
+    const js = createDevRouterModule(context.frontendState, !context.noStrict)
+    req.type("application/javascript").send(js)
+    return
+  }
+
+  if (requestPath === "/peaque.css") {
+    await servePeaqueCss(req, context.basePath, context.fileSystem)
+    return
+  }
+
+  if (requestPath === "/hmr") {
+    await hmrConnectHandler(req)
+    return
+  }
+
+  if (servePublicAsset(req, context.basePath, requestPath, context.fileSystem)) {
+    return
+  }
+
+  servePeaqueMainHtml(req)
 }

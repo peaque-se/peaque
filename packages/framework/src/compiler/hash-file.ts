@@ -1,10 +1,9 @@
-import fs from "fs"
 import { createHash } from "crypto"
-import { pipeline } from "stream/promises"
+import { type FileSystem, realFileSystem } from "../filesystem/index.js"
 
-export async function hashFile(path: string): Promise<string> {
+export async function hashFile(path: string, fileSystem: FileSystem = realFileSystem): Promise<string> {
   const hash = createHash("sha1")
-  const stream = fs.createReadStream(path)
-  await pipeline(stream, hash)
+  const content = await fileSystem.readFile(path)
+  hash.update(content)
   return hash.digest("hex")
 }

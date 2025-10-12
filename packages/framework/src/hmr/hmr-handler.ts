@@ -1,5 +1,4 @@
 import { PeaqueWebSocket, RequestHandler } from "../http/http-types.js"
-import colors from "yoctocolors"
 
 const connectedClients = new Set<PeaqueWebSocket>()
 
@@ -43,6 +42,5 @@ export function notifyConnectedClients(data: any = {}, reason = "application") {
         connectedClients.delete(ws)
       }
     })
-    //console.log(`📡 Updated ${colors.gray(reason)} (${connectedClients.size} client${connectedClients.size === 1 ? "" : "s"})`)
   }
 }

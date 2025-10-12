@@ -1,8 +1,16 @@
 import path from 'node:path'
-import fs from 'node:fs'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
 import { registerSourceMap } from '../exceptions/sourcemaps.js'
+import { type FileSystem, realFileSystem } from '../filesystem/index.js'
+
+type ModuleLoaderOptions = {
+  absWorkingDir?: string
+  tsconfig?: string
+  cacheDir?: string
+  aliasAt?: string
+  fileSystem?: FileSystem
+}
 
 type BuildContext = {
   ctx: esbuild.BuildContext
@@ -15,20 +23,13 @@ export class ModuleLoader {
   private readonly buildContexts = new Map<string, BuildContext>()
   private readonly loadingPromises = new Map<string, Promise<any>>()
   private readonly moduleCache = new Map<string, any>()
-  private readonly options: {
-    absWorkingDir?: string
-    tsconfig?: string
-    cacheDir?: string
-    aliasAt?: string
-  }
+  private readonly options: Omit<ModuleLoaderOptions, 'fileSystem'>
+  private readonly fileSystem: FileSystem
 
-  constructor(options: {
-    absWorkingDir?: string
-    tsconfig?: string
-    cacheDir?: string
-    aliasAt?: string
-  } = {}) {
-    this.options = options
+  constructor(options: ModuleLoaderOptions = {}) {
+    const { fileSystem = realFileSystem, ...loaderOptions } = options
+    this.fileSystem = fileSystem
+    this.options = loaderOptions
   }
 
   async loadModule<T = any>(modulePath: string, bustCache = true): Promise<T> {
@@ -81,7 +82,7 @@ export class ModuleLoader {
 
     let buildContext = this.buildContexts.get(entryPath)
     if (!buildContext) {
-      await fs.promises.mkdir(path.dirname(outFile), { recursive: true })
+      await this.fileSystem.mkdir(path.dirname(outFile), { recursive: true })
       const ctx = await esbuild.context({
         entryPoints: [entryPath],
         bundle: true,
@@ -117,10 +118,9 @@ export class ModuleLoader {
     const moduleHref = pathToFileURL(buildContext.outfile).href + `?v=${++ModuleLoader.importCounter}`
 
     // load the source map and register it
-    if (fs.existsSync(outFile + '.map')) {
-      const sourceMap = JSON.parse(fs.readFileSync(outFile + '.map', 'utf-8'))
+    if (await this.fileSystem.exists(outFile + '.map')) {
+      const sourceMap = JSON.parse(await this.fileSystem.readFileText(outFile + '.map', 'utf-8'))
       // patch the sources to be relative to the absWorkingDir
-      const orig = JSON.stringify(sourceMap.sources)
       if (sourceMap.sources && Array.isArray(sourceMap.sources)) {
         sourceMap.sources = sourceMap.sources.map((src: string) => {
           const absolutePath = path.resolve(path.dirname(outFile), src)
@@ -132,8 +132,8 @@ export class ModuleLoader {
     }
 
     const result = await import(moduleHref)
-    fs.unlinkSync(buildContext.outfile)
-    fs.unlinkSync(buildContext.outfile + '.map')
+    await this.fileSystem.unlink(buildContext.outfile)
+    await this.fileSystem.unlink(buildContext.outfile + '.map')
     return result
   }
 

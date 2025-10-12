@@ -1,4 +1,5 @@
 import { ArrowFunction, FunctionDeclaration, FunctionExpression, Node, Project, VariableDeclaration } from "ts-morph"
+import { CodeFile } from "../codegen/index.js"
 
 export type ServerShim = {
   shim: string
@@ -56,26 +57,33 @@ export async function makeRpcShim(sourceContent: string, path: string): Promise<
     }
   }
 
-  // Generate the shim code
-  let shimCode = `import * as superjson from 'superjson';
-const rpcCall = async (funcName, args) => {
-  const response = await fetch(\`/api/__rpc/${path}/\${funcName}\`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: superjson.stringify({ args })
-  });
-  if (!response.ok) {
-    throw new Error(\`RPC call to \${funcName} failed: \${response.statusText}\`);
+  const file = new CodeFile()
+  file.addNamespaceImport("superjson", "superjson")
+  const body = file.body
+
+  body.block("const rpcCall = async (funcName, args) => {", rpcBuilder => {
+    rpcBuilder.block(`const response = await fetch(\`/api/__rpc/${path}/\${funcName}\`, {`, responseBuilder => {
+      responseBuilder.line(`method: "POST",`)
+      responseBuilder.line(`headers: { "Content-Type": "application/json" },`)
+      responseBuilder.line(`body: superjson.stringify({ args }),`)
+    }, { close: "});" })
+    rpcBuilder.block("if (!response.ok) {", guardBuilder => {
+      guardBuilder.line("throw new Error(`RPC call to \${funcName} failed: \${response.statusText}`);")
+    })
+    rpcBuilder.line("return superjson.parse(await response.text());")
+  }, { close: "};" })
+
+  if (exportedFunctions.length > 0) {
+    body.blankLine()
   }
-  return superjson.parse(await response.text());
-};
-`
+
   for (const func of exportedFunctions) {
     if (func.name === "default") {
-      shimCode += `export default async (...args) => rpcCall('${func.name}', args);\n`
+      body.line("export default async (...args) => rpcCall('default', args);")
     } else {
-      shimCode += `export const ${func.name} = async (...args) => rpcCall('${func.name}', args);\n`
+      body.line(`export const ${func.name} = async (...args) => rpcCall('${func.name}', args);`)
     }
   }
-  return { shim: shimCode, exportedFunctions, path }
+
+  return { shim: file.toString(), exportedFunctions, path }
 }

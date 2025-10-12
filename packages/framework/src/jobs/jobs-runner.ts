@@ -4,6 +4,7 @@ import { Cron } from "croner"
 import colors from 'yoctocolors';
 import path from "path";
 import { hashFile } from "../compiler/hash-file.js";
+import { type FileSystem, realFileSystem } from "../filesystem/index.js";
 
 export interface Job {
   schedule: [string] // cron-style schedule strings
@@ -20,17 +21,19 @@ export class JobsRunner {
   private jobsFromFiles = new Map<string, RegisteredJob>()
   private jobsDir: string
   private baseDir: string
+  private readonly fileSystem: FileSystem
 
-  constructor(baseDir: string) {
+  constructor(baseDir: string, fileSystem: FileSystem = realFileSystem) {
     this.baseDir = baseDir
     this.jobsDir = path.join(baseDir, "src", "jobs")
+    this.fileSystem = fileSystem
   }
 
   async startOrUpdateJobs() {
-    const moduleLoader = new ModuleLoader({ absWorkingDir: this.baseDir })
+    const moduleLoader = new ModuleLoader({ absWorkingDir: this.baseDir, fileSystem: this.fileSystem })
     const jobFiles = await glob(`${this.jobsDir}/**/*job.ts`, { absolute: true })
     for (const file of jobFiles) {
-      const hash = await hashFile(file)
+      const hash = await hashFile(file, this.fileSystem)
       const jobName = path.dirname(path.relative(this.jobsDir, file))
       const existingJob = this.jobsFromFiles.get(jobName)
       

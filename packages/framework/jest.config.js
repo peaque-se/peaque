@@ -1,8 +1,12 @@
 /** @type {import('jest').Config} */
 export default {
   preset: null,
-  extensionsToTreatAsEsm: ['.ts'],
+  extensionsToTreatAsEsm: ['.ts', '.tsx'],
+  setupFiles: ['<rootDir>/test/setup.js'],
   moduleNameMapper: {
+    '^../../src/compiler/tailwind-bundler.js$': '<rootDir>/test/__mocks__/tailwind-bundler.js',
+    '^../compiler/tailwind-bundler.js$': '<rootDir>/test/__mocks__/tailwind-bundler.js',
+    '^superjson$': '<rootDir>/test/__mocks__/superjson.js',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   testEnvironment: 'node',
@@ -15,7 +19,7 @@ export default {
     '!src/**/*.d.ts',
   ],
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
+    '^.+\\.(ts|tsx)$': ['ts-jest', {
       useESM: true,
       tsconfig: {
         module: 'ESNext',
@@ -26,5 +30,5 @@ export default {
   transformIgnorePatterns: [
     'node_modules/(?!(yoctocolors)/)'
   ],
-  moduleFileExtensions: ['ts', 'js', 'json']
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'json']
 };

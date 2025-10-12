@@ -2,8 +2,8 @@
 
 import { RequestHandler } from "../http/http-types.js"
 import { Router } from "../http/http-router.js"
-import { promises as fs } from "fs"
 import { join, extname, basename } from "path"
+import { type FileSystem, realFileSystem } from "../filesystem/index.js"
 
 export const contentTypeRegistry: Record<string, string> = {
   ".js": "application/javascript",
@@ -73,7 +73,14 @@ function createHandler(asset: AssetData, enableLongCache: boolean = false): Requ
   }
 }
 
-export async function addAssetRoutesForFolder(router: Router, folderPath: string, basePath: string = "/assets", enableLongCache: boolean = false, alsoServeWithoutPrefix: boolean = false): Promise<AssetStats> {
+export async function addAssetRoutesForFolder(
+  router: Router,
+  folderPath: string,
+  basePath: string = "/assets",
+  enableLongCache: boolean = false,
+  alsoServeWithoutPrefix: boolean = false,
+  fileSystem: FileSystem = realFileSystem
+): Promise<AssetStats> {
   const assets = new Map<string, AssetData>()
 
   let totalBytesInMemory = 0
@@ -83,9 +90,9 @@ export async function addAssetRoutesForFolder(router: Router, folderPath: string
 
   // Load all files recursively
   async function loadFiles(dir: string, basePath: string = ""): Promise<void> {
-    const entries = await fs.readdir(dir, { withFileTypes: true })
+    const entries = await fileSystem.readdirEntries(dir)
     for (const entry of entries) {
-      const fullPath = join(dir, entry.name)
+      const fullPath = entry.path
       const relativePath = join(basePath, entry.name)
       if (entry.isDirectory()) {
         await loadFiles(fullPath, relativePath)
@@ -94,7 +101,7 @@ export async function addAssetRoutesForFolder(router: Router, folderPath: string
         if (ext === ".gz" || ext === ".br") continue // Skip compressed files
         const baseName = basename(entry.name, ext)
         const asset: AssetData = {
-          original: await fs.readFile(fullPath),
+          original: await fileSystem.readFile(fullPath),
           contentType: contentTypeRegistry[ext] || "application/octet-stream",
         }
 
@@ -102,10 +109,10 @@ export async function addAssetRoutesForFolder(router: Router, folderPath: string
         const gzipPath = join(dir, `${baseName}${ext}.gz`)
         const brotliPath = join(dir, `${baseName}${ext}.br`)
         try {
-          asset.gzip = await fs.readFile(gzipPath)
+          asset.gzip = await fileSystem.readFile(gzipPath)
         } catch {}
         try {
-          asset.brotli = await fs.readFile(brotliPath)
+          asset.brotli = await fileSystem.readFile(brotliPath)
         } catch {}
 
         assets.set(relativePath, asset)

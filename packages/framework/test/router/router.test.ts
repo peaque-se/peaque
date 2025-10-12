@@ -1,7 +1,7 @@
 import { buildRouter, RouteFileConfig } from "../../src/router/builder.js"
 import { match, RouteNode, MatchResult } from "../../src/router/router.js"
 import { serializeRouterToJs } from "../../src/router/serializer.js"
-import { MockFileSystem } from "../../src/router/utils.js"
+import { MockFileSystem } from "../../src/filesystem/index.js"
 import { describe, test, expect, beforeEach } from '@jest/globals'
 
 describe('Router - Comprehensive Tests', () => {
@@ -692,19 +692,17 @@ describe('Router - Comprehensive Tests', () => {
 
   describe('buildRouter() function', () => {
     test('should build router from directory structure', () => {
-      mockFs.addDirectory("/app/pages", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/page.tsx" },
-        { name: "users", isDirectory: true, isFile: false, path: "/app/pages/users" }
-      ])
-
-      mockFs.addDirectory("/app/pages/users", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/users/page.tsx" },
-        { name: "[id]", isDirectory: true, isFile: false, path: "/app/pages/users/[id]" }
-      ])
-
-      mockFs.addDirectory("/app/pages/users/[id]", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/users/[id]/page.tsx" }
-      ])
+      mockFs.addFiles({
+        '/app/pages': {
+          'page.tsx': '',
+          'users': {
+            'page.tsx': '',
+            '[id]': {
+              'page.tsx': ''
+            }
+          }
+        }
+      })
 
       const router = buildRouter("/app/pages", defaultConfig, mockFs)
 
@@ -721,18 +719,14 @@ describe('Router - Comprehensive Tests', () => {
     })
 
     test('should handle stacked files', () => {
-      mockFs.addDirectory("/app/pages", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/page.tsx" },
-        { name: "layout.tsx", isFile: true, isDirectory: false, path: "/app/pages/layout.tsx" },
-        { name: "guard.ts", isFile: true, isDirectory: false, path: "/app/pages/guard.ts" },
-        { name: "users", isDirectory: true, isFile: false, path: "/app/pages/users" }
-      ])
-
-      mockFs.addDirectory("/app/pages/users", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/users/page.tsx" },
-        { name: "layout.tsx", isFile: true, isDirectory: false, path: "/app/pages/users/layout.tsx" },
-        { name: "guard.ts", isFile: true, isDirectory: false, path: "/app/pages/users/guard.ts" }
-      ])
+      mockFs.addFiles({
+        '/app/pages/page.tsx': '',
+        '/app/pages/layout.tsx': '',
+        '/app/pages/guard.ts': '',
+        '/app/pages/users/page.tsx': '',
+        '/app/pages/users/layout.tsx': '',
+        '/app/pages/users/guard.ts': ''
+      })
 
       const router = buildRouter("/app/pages", defaultConfig, mockFs)
 
@@ -745,14 +739,10 @@ describe('Router - Comprehensive Tests', () => {
     })
 
     test('should handle wildcard routes', () => {
-      mockFs.addDirectory("/app/pages", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/page.tsx" },
-        { name: "[...slug]", isDirectory: true, isFile: false, path: "/app/pages/[...slug]" }
-      ])
-
-      mockFs.addDirectory("/app/pages/[...slug]", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/[...slug]/page.tsx" }
-      ])
+      mockFs.addFiles({
+        '/app/pages/page.tsx': '',
+        '/app/pages/[...slug]/page.tsx': ''
+      })
 
       const router = buildRouter("/app/pages", defaultConfig, mockFs)
 
@@ -762,14 +752,10 @@ describe('Router - Comprehensive Tests', () => {
     })
 
     test('should handle optional wildcard routes', () => {
-      mockFs.addDirectory("/app/pages", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/page.tsx" },
-        { name: "[[...slug]]", isDirectory: true, isFile: false, path: "/app/pages/[[...slug]]" }
-      ])
-
-      mockFs.addDirectory("/app/pages/[[...slug]]", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/[[...slug]]/page.tsx" }
-      ])
+      mockFs.addFiles({
+        '/app/pages/page.tsx': '',
+        '/app/pages/[[...slug]]/page.tsx': ''
+      })
 
       const router = buildRouter("/app/pages", defaultConfig, mockFs)
 
@@ -779,18 +765,10 @@ describe('Router - Comprehensive Tests', () => {
     })
 
     test('should handle excluded routes', () => {
-      mockFs.addDirectory("/app/pages", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/page.tsx" },
-        { name: "(auth)", isDirectory: true, isFile: false, path: "/app/pages/(auth)" }
-      ])
-
-      mockFs.addDirectory("/app/pages/(auth)", [
-        { name: "login", isDirectory: true, isFile: false, path: "/app/pages/(auth)/login" }
-      ])
-
-      mockFs.addDirectory("/app/pages/(auth)/login", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/(auth)/login/page.tsx" }
-      ])
+      mockFs.addFiles({
+        '/app/pages/page.tsx': '',
+        '/app/pages/(auth)/login/page.tsx': ''
+      })
 
       const router = buildRouter("/app/pages", defaultConfig, mockFs)
 
@@ -802,29 +780,19 @@ describe('Router - Comprehensive Tests', () => {
     })
 
     test('should throw error for ambiguous excluded routes', () => {
-      mockFs.addDirectory("/app/pages", [
-        { name: "(auth)", isDirectory: true, isFile: false, path: "/app/pages/(auth)" },
-        { name: "(admin)", isDirectory: true, isFile: false, path: "/app/pages/(admin)" }
-      ])
-
-      mockFs.addDirectory("/app/pages/(auth)", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/(auth)/page.tsx" }
-      ])
-
-      mockFs.addDirectory("/app/pages/(admin)", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/(admin)/page.tsx" }
-      ])
+      mockFs.addFiles({
+        '/app/pages/(auth)/page.tsx': '',
+        '/app/pages/(admin)/page.tsx': ''
+      })
 
       expect(() => buildRouter("/app/pages", defaultConfig, mockFs)).toThrow("Ambiguous routes")
     })
 
     test('should handle empty directories', () => {
-      mockFs.addDirectory("/app/pages", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/page.tsx" },
-        { name: "empty", isDirectory: true, isFile: false, path: "/app/pages/empty" }
-      ])
-
-      mockFs.addDirectory("/app/pages/empty", [])
+      mockFs.addFiles({
+        '/app/pages/page.tsx': '',
+        '/app/pages/empty': {}
+      })
 
       const router = buildRouter("/app/pages", defaultConfig, mockFs)
 
@@ -919,46 +887,18 @@ describe('Router - Comprehensive Tests', () => {
   describe('Integration tests', () => {
     test('should build and match complex routing structure', () => {
       // Set up a complex directory structure
-      mockFs.addDirectory("/app/pages", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/page.tsx" },
-        { name: "layout.tsx", isFile: true, isDirectory: false, path: "/app/pages/layout.tsx" },
-        { name: "users", isDirectory: true, isFile: false, path: "/app/pages/users" },
-        { name: "posts", isDirectory: true, isFile: false, path: "/app/pages/posts" },
-        { name: "[...notfound]", isDirectory: true, isFile: false, path: "/app/pages/[...notfound]" }
-      ])
-
-      mockFs.addDirectory("/app/pages/users", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/users/page.tsx" },
-        { name: "layout.tsx", isFile: true, isDirectory: false, path: "/app/pages/users/layout.tsx" },
-        { name: "[id]", isDirectory: true, isFile: false, path: "/app/pages/users/[id]" }
-      ])
-
-      mockFs.addDirectory("/app/pages/users/[id]", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/users/[id]/page.tsx" },
-        { name: "posts", isDirectory: true, isFile: false, path: "/app/pages/users/[id]/posts" }
-      ])
-
-      mockFs.addDirectory("/app/pages/users/[id]/posts", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/users/[id]/posts/page.tsx" },
-        { name: "[postId]", isDirectory: true, isFile: false, path: "/app/pages/users/[id]/posts/[postId]" }
-      ])
-
-      mockFs.addDirectory("/app/pages/users/[id]/posts/[postId]", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/users/[id]/posts/[postId]/page.tsx" }
-      ])
-
-      mockFs.addDirectory("/app/pages/posts", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/posts/page.tsx" },
-        { name: "[id]", isDirectory: true, isFile: false, path: "/app/pages/posts/[id]" }
-      ])
-
-      mockFs.addDirectory("/app/pages/posts/[id]", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/posts/[id]/page.tsx" }
-      ])
-
-      mockFs.addDirectory("/app/pages/[...notfound]", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/pages/[...notfound]/page.tsx" }
-      ])
+      mockFs.addFiles({
+        '/app/pages/page.tsx': '',
+        '/app/pages/layout.tsx': '',
+        '/app/pages/users/page.tsx': '',
+        '/app/pages/users/layout.tsx': '',
+        '/app/pages/users/[id]/page.tsx': '',
+        '/app/pages/users/[id]/posts/page.tsx': '',
+        '/app/pages/users/[id]/posts/[postId]/page.tsx': '',
+        '/app/pages/posts/page.tsx': '',
+        '/app/pages/posts/[id]/page.tsx': '',
+        '/app/pages/[...notfound]/page.tsx': ''
+      })
 
       const router = buildRouter("/app/pages", defaultConfig, mockFs)
 
@@ -979,35 +919,15 @@ describe('Router - Comprehensive Tests', () => {
 
     test('should handle real-world Next.js style routing', () => {
       // Simulate a Next.js style app directory structure
-      mockFs.addDirectory("/app", [
-        { name: "layout.tsx", isFile: true, isDirectory: false, path: "/app/layout.tsx" },
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/page.tsx" },
-        { name: "dashboard", isDirectory: true, isFile: false, path: "/app/dashboard" },
-        { name: "(auth)", isDirectory: true, isFile: false, path: "/app/(auth)" }
-      ])
-
-      mockFs.addDirectory("/app/dashboard", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/dashboard/page.tsx" },
-        { name: "layout.tsx", isFile: true, isDirectory: false, path: "/app/dashboard/layout.tsx" },
-        { name: "[userId]", isDirectory: true, isFile: false, path: "/app/dashboard/[userId]" }
-      ])
-
-      mockFs.addDirectory("/app/dashboard/[userId]", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/dashboard/[userId]/page.tsx" },
-        { name: "settings", isDirectory: true, isFile: false, path: "/app/dashboard/[userId]/settings" }
-      ])
-
-      mockFs.addDirectory("/app/dashboard/[userId]/settings", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/dashboard/[userId]/settings/page.tsx" }
-      ])
-
-      mockFs.addDirectory("/app/(auth)", [
-        { name: "login", isDirectory: true, isFile: false, path: "/app/(auth)/login" }
-      ])
-
-      mockFs.addDirectory("/app/(auth)/login", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/(auth)/login/page.tsx" }
-      ])
+      mockFs.addFiles({
+        '/app/layout.tsx': '',
+        '/app/page.tsx': '',
+        '/app/dashboard/page.tsx': '',
+        '/app/dashboard/layout.tsx': '',
+        '/app/dashboard/[userId]/page.tsx': '',
+        '/app/dashboard/[userId]/settings/page.tsx': '',
+        '/app/(auth)/login/page.tsx': ''
+      })
 
       const router = buildRouter("/app", defaultConfig, mockFs)
 
@@ -1035,28 +955,12 @@ describe('Router - Comprehensive Tests', () => {
 
     test('should handle multiple route groups at root level', () => {
       // Test the user's specific structure with multiple route groups
-      mockFs.addDirectory("/app", [
-        { name: "(private)", isDirectory: true, isFile: false, path: "/app/(private)" },
-        { name: "(public)", isDirectory: true, isFile: false, path: "/app/(public)" },
-        { name: "head.ts", isFile: true, isDirectory: false, path: "/app/head.ts" }
-      ])
-
-      mockFs.addDirectory("/app/(private)", [
-        { name: "dashboard", isDirectory: true, isFile: false, path: "/app/(private)/dashboard" }
-      ])
-
-      mockFs.addDirectory("/app/(private)/dashboard", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/(private)/dashboard/page.tsx" }
-      ])
-
-      mockFs.addDirectory("/app/(public)", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/(public)/page.tsx" },
-        { name: "about", isDirectory: true, isFile: false, path: "/app/(public)/about" }
-      ])
-
-      mockFs.addDirectory("/app/(public)/about", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/(public)/about/page.tsx" }
-      ])
+      mockFs.addFiles({
+        '/app/(private)/dashboard/page.tsx': '',
+        '/app/(public)/page.tsx': '',
+        '/app/(public)/about/page.tsx': '',
+        '/app/head.ts': ''
+      })
 
       // Custom config that includes head.ts as a stacking file
       const customConfig = [
@@ -1088,30 +992,14 @@ describe('Router - Comprehensive Tests', () => {
 
     test('should handle route groups with root layout inheritance', () => {
       // Set up directory structure with route groups and root layout
-      mockFs.addDirectory("/app", [
-        { name: "layout.tsx", isFile: true, isDirectory: false, path: "/app/layout.tsx" },
-        { name: "(private)", isDirectory: true, isFile: false, path: "/app/(private)" },
-        { name: "(public)", isDirectory: true, isFile: false, path: "/app/(public)" }
-      ])
-
-      mockFs.addDirectory("/app/(private)", [
-        { name: "layout.tsx", isFile: true, isDirectory: false, path: "/app/(private)/layout.tsx" },
-        { name: "dashboard", isDirectory: true, isFile: false, path: "/app/(private)/dashboard" }
-      ])
-
-      mockFs.addDirectory("/app/(private)/dashboard", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/(private)/dashboard/page.tsx" }
-      ])
-
-      mockFs.addDirectory("/app/(public)", [
-        { name: "layout.tsx", isFile: true, isDirectory: false, path: "/app/(public)/layout.tsx" },
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/(public)/page.tsx" },
-        { name: "about", isDirectory: true, isFile: false, path: "/app/(public)/about" }
-      ])
-
-      mockFs.addDirectory("/app/(public)/about", [
-        { name: "page.tsx", isFile: true, isDirectory: false, path: "/app/(public)/about/page.tsx" }
-      ])
+      mockFs.addFiles({
+        '/app/layout.tsx': '',
+        '/app/(private)/layout.tsx': '',
+        '/app/(private)/dashboard/page.tsx': '',
+        '/app/(public)/layout.tsx': '',
+        '/app/(public)/page.tsx': '',
+        '/app/(public)/about/page.tsx': ''
+      })
 
       const router = buildRouter("/app", defaultConfig, mockFs)
 
@@ -1235,6 +1123,10 @@ describe('Router - Comprehensive Tests', () => {
     })
 
     test('should validate route configuration', () => {
+      mockFs.addFiles({
+        '/empty': {}
+      })
+
       // Test with empty config
       const router1 = buildRouter("/empty", [], mockFs)
       expect(router1.accept).toBe(false)

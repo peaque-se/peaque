@@ -3,7 +3,7 @@ import { WebSocket, WebSocketServer } from "ws"
 import { CookieJarImpl, PeaqueRequestImpl } from "./default-impl.js"
 import { parseRequestBody } from "./http-bodyparser.js"
 import { HttpMethod, PeaqueWebSocket, RequestHandler, WebSocketHandler } from "./http-types.js"
-import { InterruptFurtherProcessing } from "@peaque/framework"
+import { InterruptFurtherProcessing } from "../exceptions/index.js"
 
 class DeferredPeaqueWebSocket implements PeaqueWebSocket {
   private ws?: WebSocket

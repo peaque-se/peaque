@@ -4,13 +4,16 @@
 /// Converts require calls to import statements for compatibility
 /// © Peaque Developers 2025
 
-import * as fs from "fs"
 import path from "path"
 import * as esbuild from "esbuild"
 import { createRequire } from "module"
+import { fileURLToPath } from "url"
+import { CodeBuilder, CodeFile } from "../codegen/index.js"
 import { makeImportsRelative } from "./imports.js"
+import { type FileSystem, realFileSystem } from "../filesystem/index.js"
 
-const frameworkRequire = createRequire(import.meta.url)
+const bundleFilename = fileURLToPath(import.meta.url)
+const frameworkRequire = createRequire(bundleFilename)
 const frameworkResolve = frameworkRequire.resolve
 
 interface PackageJson {
@@ -53,11 +56,15 @@ async function bundleCommonJSModule(moduleName: string, pkgJson: PackageJson, ba
   const require = createRequire("file://" + path.join(basePath, "noop.js").replace(/\\/g, "/"))
   const mod = require(moduleName)
   const keys = Object.keys(mod)
-  let code = `import cjs from ${JSON.stringify(moduleName)};\n\n`
+
+  const file = new CodeFile()
+  file.addDefaultImport(moduleName, "cjs")
   if (keys.length > 0) {
-    code += `export const { ${keys.join(", ")} } = cjs;\n`
+    file.body.line(`export const { ${keys.join(", ")} } = cjs;`)
   }
-  code += `export default cjs;\n`
+  file.body.line("export default cjs;")
+
+  const code = file.toString()
 
   const result = await esbuild.build({
     stdin: {
@@ -94,22 +101,29 @@ function convertRequiresToImports(bundledCode: string): string {
     return bundledCode
   }
 
-  const requireLines = []
-  requireLines.push(`function require(path) {`)
-  addedImports.forEach((line) => {
-    const match = line.match(/import \* as (__pq__[^ ]+) from (.+);/)
-    if (match) {
-      const importName = match[1]
-      const importPath = match[2]
-      requireLines.push(`  if (path === ${importPath}) return ${importName};`)
-    }
-  })
-  requireLines.push(`  throw new Error("Cannot find module '" + path + "'");`)
-  requireLines.push(`}`)
+  const builder = new CodeBuilder()
+  for (const line of addedImports) {
+    builder.line(line)
+  }
 
-  const addedImportsString = Array.from(addedImports.values()).join("\n")
-  const requireString = requireLines.join("\n")
-  return addedImportsString + "\n" + requireString + "\n" + bundledCode
+  builder.blankLine()
+
+  builder.block("function require(path) {", body => {
+    addedImports.forEach((line) => {
+      const match = line.match(/import \* as (__pq__[^ ]+) from (.+);/)
+      if (match) {
+        const importName = match[1]
+        const importPath = match[2]
+        body.line(`if (path === ${importPath}) return ${importName};`)
+      }
+    })
+    body.line(`throw new Error("Cannot find module '" + path + "'");`)
+  })
+
+  builder.blankLine()
+  builder.raw(bundledCode)
+
+  return builder.toString()
 }
 
 /// Bundles an ESM module using esbuild
@@ -117,7 +131,9 @@ function convertRequiresToImports(bundledCode: string): string {
 /// and let esbuild handle the tree-shaking and bundling.
 /// We still need to mark dependencies as external to avoid bundling them.
 export async function bundleESMModule(moduleName: string, moduleBaseName: string, pkgJson: PackageJson, basePath: string): Promise<string> {
-  let code = `export * from ${JSON.stringify(moduleName)};\n`
+  const file = new CodeFile()
+  file.body.line(`export * from ${JSON.stringify(moduleName)};`)
+  const code = file.toString()
   const result = await esbuild.build({
     stdin: {
       contents: code,
@@ -139,37 +155,37 @@ export async function bundleESMModule(moduleName: string, moduleBaseName: string
 /// Finds the correct module name in node_modules, handling scoped packages and sub-paths
 /// For example, for moduleName = "@scope/package/sub/path", it will check for
 /// "@scope/package", then "@scope", and finally "package" until it finds a package.json
-function findModuleName(moduleName: string, basePath: string): string | null {
+function findModuleName(moduleName: string, basePath: string, fileSystem: FileSystem): string | null {
   if (moduleName.includes("/")) {
     const parts = moduleName.split("/")
     for (let i = parts.length; i > 0; i--) {
       const attempt = parts.slice(0, i).join("/")
-      if (fs.existsSync(path.join(basePath, "node_modules", attempt, "package.json"))) {
+      if (fileSystem.existsSync(path.join(basePath, "node_modules", attempt, "package.json"))) {
         return attempt
       }
     }
     return null
   }
-  return fs.existsSync(path.join(basePath, "node_modules", moduleName, "package.json")) ? moduleName : null
+  return fileSystem.existsSync(path.join(basePath, "node_modules", moduleName, "package.json")) ? moduleName : null
 }
 
 /// Sets the base dependencies from the package.json in the given basePath
 /// This is used to avoid bundling dependencies that are already available in the environment
-export function setBaseDependencies(basePath: string) {
+export function setBaseDependencies(basePath: string, fileSystem: FileSystem = realFileSystem) {
   if (true) {
     const pkgPath = path.join(basePath, "package.json")
-    if (!fs.existsSync(pkgPath)) {
+    if (!fileSystem.existsSync(pkgPath)) {
       throw new Error(`No package.json found in the current directory: ${basePath}`)
     }
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as PackageJson
+    const pkg = JSON.parse(fileSystem.readFileSync(pkgPath, "utf-8") as string) as PackageJson
     const deps = Object.keys(pkg.dependencies || {})
     dependencies.push(...deps)
   }
 
   // also exclude any dependencies that @peaque/framework depends on
   const frameworkPkgPath = path.join(basePath, "node_modules", "@peaque", "framework", "package.json")
-  if (fs.existsSync(frameworkPkgPath)) {
-    const frameworkPkg = JSON.parse(fs.readFileSync(frameworkPkgPath, "utf-8")) as PackageJson
+  if (fileSystem.existsSync(frameworkPkgPath)) {
+    const frameworkPkg = JSON.parse(fileSystem.readFileSync(frameworkPkgPath, "utf-8") as string) as PackageJson
     const frameworkDeps = Object.keys(frameworkPkg.dependencies || {})
     const ownDeps = frameworkDeps.filter((d) => !dependencies.includes(d))
     dependencies.push(...ownDeps)
@@ -181,11 +197,15 @@ export function setBaseDependencies(basePath: string) {
 // Bundles a module from node_modules, handling both CommonJS and ESM modules
 // It first determines the module type by checking the package.json
 // Then it calls the appropriate bundling function
-export async function bundleModuleFromNodeModules(moduleName: string, basePath: string): Promise<string> {
+export async function bundleModuleFromNodeModules(
+  moduleName: string,
+  basePath: string,
+  fileSystem: FileSystem = realFileSystem
+): Promise<string> {
   // try to load it from node_modules/@peaque/framework dependencies if not found
-  let moduleBaseName = findModuleName(moduleName, basePath)
+  let moduleBaseName = findModuleName(moduleName, basePath, fileSystem)
   if (!moduleBaseName) {
-    moduleBaseName = findModuleName(moduleName, path.join(basePath, "node_modules", "@peaque", "framework"))
+    moduleBaseName = findModuleName(moduleName, path.join(basePath, "node_modules", "@peaque", "framework"), fileSystem)
     if (!moduleBaseName) {
       // one final attempt - try to find the module in whatever node_modules we are currently loading from
       let ourOwnModules = frameworkResolve("esbuild") // any of our dependencies should do
@@ -193,7 +213,7 @@ export async function bundleModuleFromNodeModules(moduleName: string, basePath: 
         ourOwnModules = path.dirname(ourOwnModules)
       }
       ourOwnModules = path.dirname(ourOwnModules)
-      moduleBaseName = findModuleName(moduleName, ourOwnModules)
+      moduleBaseName = findModuleName(moduleName, ourOwnModules, fileSystem)
       if (!moduleBaseName) {
         throw new Error(`Module ${moduleName} not found in node_modules or node_modules/@peaque/framework`)
       } else {
@@ -205,7 +225,7 @@ export async function bundleModuleFromNodeModules(moduleName: string, basePath: 
   }
 
   const pkgJsonPath = path.join(basePath, "node_modules", moduleBaseName, "package.json")
-  const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8")) as PackageJson
+  const pkgJson = JSON.parse(fileSystem.readFileSync(pkgJsonPath, "utf-8") as string) as PackageJson
 
   const isESM = isESMModule(pkgJson)
 

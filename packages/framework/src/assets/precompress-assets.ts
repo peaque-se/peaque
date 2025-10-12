@@ -1,6 +1,6 @@
-import fs from 'fs/promises';
 import path from 'path';
 import zlib from 'zlib';
+import { type FileSystem, realFileSystem } from '../filesystem/index.js';
 
 interface PrecompressResult {
   files: string[];
@@ -10,13 +10,13 @@ interface PrecompressResult {
 /// Save the compressed files alongside the original files with .gz and .br extensions
 /// Skip files that are already compressed (.gz, .br)
 
-export async function precompressAssets(folderPath: string): Promise<PrecompressResult> {
+export async function precompressAssets(folderPath: string, fileSystem: FileSystem = realFileSystem): Promise<PrecompressResult> {
   async function getAllFiles(dirPath: string): Promise<string[]> {
-    const files = await fs.readdir(dirPath);
+    const files = await fileSystem.readdir(dirPath);
     const allFiles: string[] = [];
     for (const file of files) {
       const fullPath = path.join(dirPath, file);
-      const stat = await fs.stat(fullPath);
+      const stat = await fileSystem.stat(fullPath);
       if (stat.isDirectory()) {
         allFiles.push(...await getAllFiles(fullPath));
       } else {
@@ -30,24 +30,24 @@ export async function precompressAssets(folderPath: string): Promise<Precompress
   const resultFiles: string[] = [];
   for (const file of files) {
     if (file.endsWith('.gz') || file.endsWith('.br')) continue;
-    const stat = await fs.stat(file);
+    const stat = await fileSystem.stat(file);
     resultFiles.push(file);
     let needGzip = true;
     let needBrotli = true;
     try {
-      const gzStat = await fs.stat(file + '.gz');
+      const gzStat = await fileSystem.stat(file + '.gz');
       if (gzStat.mtime.getTime() === stat.mtime.getTime()) {
         needGzip = false;
       }
     } catch {}
     try {
-      const brStat = await fs.stat(file + '.br');
+      const brStat = await fileSystem.stat(file + '.br');
       if (brStat.mtime.getTime() === stat.mtime.getTime()) {
         needBrotli = false;
       }
     } catch {}
     if (!needGzip && !needBrotli) continue;
-    const content = await fs.readFile(file);
+    const content = await fileSystem.readFile(file);
     if (needGzip) {
       const gzipped = await new Promise<Buffer>((resolve, reject) => {
         zlib.gzip(content, (err, result) => {
@@ -55,8 +55,8 @@ export async function precompressAssets(folderPath: string): Promise<Precompress
           else resolve(result);
         });
       });
-      await fs.writeFile(file + '.gz', gzipped);
-      await fs.utimes(file + '.gz', stat.atime, stat.mtime);
+      await fileSystem.writeFile(file + '.gz', gzipped);
+      await fileSystem.utimes(file + '.gz', stat.atime, stat.mtime);
     }
     if (needBrotli) {
       const brotlied = await new Promise<Buffer>((resolve, reject) => {
@@ -65,8 +65,8 @@ export async function precompressAssets(folderPath: string): Promise<Precompress
           else resolve(result);
         });
       });
-      await fs.writeFile(file + '.br', brotlied);
-      await fs.utimes(file + '.br', stat.atime, stat.mtime);
+      await fileSystem.writeFile(file + '.br', brotlied);
+      await fileSystem.utimes(file + '.br', stat.atime, stat.mtime);
     }
   }
   return { files: resultFiles };
