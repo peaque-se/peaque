@@ -26,6 +26,10 @@ jest.mock('dotenv', () => ({
   config: jest.fn()
 }))
 
+jest.mock("../../src/compiler/bundle.js", () => ({
+  setBaseDependencies: jest.fn(),
+}))
+
 import { DevServer } from "../../src/server/dev-server.js"
 import { MockFileSystem } from "../../src/filesystem/index.js"
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
@@ -40,6 +44,13 @@ describe('DevServer Integration Tests', () => {
     mockFileSystem = new MockFileSystem()
 
     // Setup basic file structure
+    mockFileSystem.writeFileSync(`${basePath}/package.json`, JSON.stringify({
+      name: 'test-project',
+      dependencies: {
+        'react': '^18.0.0',
+        'react-dom': '^18.0.0'
+      }
+    }))
     mockFileSystem.writeFileSync(`${basePath}/src/pages/index.tsx`, 'export default function Home() {}')
     mockFileSystem.writeFileSync(`${basePath}/src/api/test.ts`, 'export const GET = () => {}')
     mockFileSystem.mkdirSync(`${basePath}/public`, { recursive: true })

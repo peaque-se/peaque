@@ -188,3 +188,47 @@ export async function GET(req: PeaqueRequest) {
     .send({ message: 'CORS enabled' });
 }
 ```
+
+## Using `useCurrentRequest` in Shared Functions
+
+If you need to access the current request in utility functions called from API routes, you can use the `useCurrentRequest()` hook:
+
+```typescript title="src/utils/auth.ts"
+import { useCurrentRequest } from '@peaque/framework/server';
+
+export async function requireAuth(): Promise<string> {
+  const req = useCurrentRequest();
+  const token = req.cookies().get('auth-token');
+
+  if (!token) {
+    throw new Error('Unauthorized');
+  }
+
+  // Verify token and return user ID
+  return 'user-id-123';
+}
+```
+
+```typescript title="src/api/profile/route.ts"
+import type { PeaqueRequest } from '@peaque/framework';
+import { requireAuth } from '../../utils/auth';
+
+export async function GET(req: PeaqueRequest) {
+  // The request context is automatically available to requireAuth()
+  const userId = await requireAuth();
+
+  req.send({ userId, profile: {} });
+}
+```
+
+:::info
+The `useCurrentRequest()` hook works in API routes, server actions, and middleware. It provides access to the current request context without needing to pass the request object through function parameters.
+
+See the [Server Actions](/docs/server-actions#the-usecurrentrequest-hook) documentation for more details.
+:::
+
+## Next Steps
+
+- Learn about [Server Actions](/docs/server-actions) for calling server functions from React components
+- Add [Middleware](/docs/api-middleware) to protect routes or transform requests
+- Use [Environment Variables](/docs/environment) to configure your API

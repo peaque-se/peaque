@@ -20,7 +20,10 @@ import { RouteNode } from "../../src/router/router.js"
 import { ModuleContext } from "../../src/server/dev-server-modules.js"
 import { FileSystem } from "../../src/filesystem/index.js"
 
-jest.mock("../../src/compiler/bundle.js")
+jest.mock("../../src/compiler/bundle.js", () => ({
+  setBaseDependencies: jest.fn(),
+  bundleModuleFromNodeModules: jest.fn(),
+}))
 jest.mock("../../src/server/dev-server-modules.js")
 jest.mock("../../src/server/dev-server-api.js")
 jest.mock("../../src/server/dev-server-static.js")

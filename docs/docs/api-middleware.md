@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 ---
 
 # API Middleware
@@ -175,6 +175,55 @@ For a request to `/api/users/profile`, the order would be:
 3. `src/api/users/middleware.ts`
 4. `src/api/users/profile/route.ts`
 
+## Using `useCurrentRequest` in Middleware Utilities
+
+You can create reusable authentication and authorization utilities that work with middleware using the `useCurrentRequest()` hook:
+
+```typescript title="src/utils/auth.ts"
+import { useCurrentRequest } from '@peaque/framework/server';
+
+export async function requireAuth(): Promise<string> {
+  const req = useCurrentRequest();
+  const token = req.cookies().get('auth-token');
+
+  if (!token) {
+    throw new Error('Unauthorized');
+  }
+
+  // Verify token and return user ID
+  return 'user-id-123';
+}
+
+export async function requireRole(role: string): Promise<void> {
+  const userId = await requireAuth();
+  // Check if user has the required role
+  // const userRole = await getUserRole(userId);
+  // if (userRole !== role) {
+  //   throw new Error('Forbidden');
+  // }
+}
+```
+
+```typescript title="src/api/admin/middleware.ts"
+import type { RequestMiddleware } from '@peaque/framework';
+import { requireRole } from '../../utils/auth';
+
+export const middleware: RequestMiddleware = async (req, next) => {
+  try {
+    await requireRole('admin');
+    await next(req);
+  } catch (error) {
+    req.code(403).send({ error: 'Admin access required' });
+  }
+};
+```
+
+:::info
+The `useCurrentRequest()` hook works in API routes, server actions, and middleware. It provides access to the current request context without needing to pass the request object through function parameters.
+
+See the [Server Actions](/docs/server-actions#the-usecurrentrequest-hook) documentation for more details.
+:::
+
 ## Best Practices
 
 - Keep middleware functions focused on a single responsibility
@@ -183,3 +232,4 @@ For a request to `/api/users/profile`, the order would be:
 - Avoid long-running operations in middleware that could block requests
 - Use TypeScript types for better development experience
 - Test your middleware functions thoroughly
+- Use `useCurrentRequest()` to create reusable authentication utilities

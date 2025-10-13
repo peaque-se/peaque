@@ -4,6 +4,7 @@ import { CookieJarImpl, PeaqueRequestImpl } from "./default-impl.js"
 import { parseRequestBody } from "./http-bodyparser.js"
 import { HttpMethod, PeaqueWebSocket, RequestHandler, WebSocketHandler } from "./http-types.js"
 import { InterruptFurtherProcessing } from "../exceptions/index.js"
+import { runWithRequestContext } from "./request-context.js"
 
 class DeferredPeaqueWebSocket implements PeaqueWebSocket {
   private ws?: WebSocket
@@ -178,7 +179,8 @@ export class HttpServer {
       )
 
       try {
-        await this.handler(peaqueReq)
+        // Run the handler within the request context so useCurrentRequest() works
+        await runWithRequestContext(peaqueReq, () => this.handler(peaqueReq))
       } catch (err) {
         if (peaqueReq.isResponded() && (err instanceof InterruptFurtherProcessing || (err && typeof err === "object" && (err as any).type === "@peaque/framework/InterruptFurtherProcessing"))) {
           // Intended interruption of further processing - do nothing

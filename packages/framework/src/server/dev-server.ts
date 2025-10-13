@@ -3,6 +3,7 @@ import { config } from "dotenv"
 import path from "path"
 import colors from "yoctocolors"
 import { setupImportAliases } from "../compiler/imports.js"
+import { setBaseDependencies } from "../compiler/bundle.js"
 import { setupSourceMaps } from "../exceptions/sourcemaps.js"
 import { hmrConnectHandler, notifyConnectedClients } from "../hmr/hmr-handler.js"
 import { ModuleLoader } from "../hmr/module-loader.js"
@@ -66,7 +67,7 @@ export class DevServer {
       }
     }
 
-    // setBaseDependencies(basePath, this.fileSystem)
+    setBaseDependencies(basePath, this.fileSystem)
 
     if (!fullStackTrace) {
       setupSourceMaps()
