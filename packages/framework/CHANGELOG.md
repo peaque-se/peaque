@@ -1,5 +1,11 @@
 # @peaque/framework
 
+## 2.7.0
+
+### Minor Changes
+
+- Increased test coverage by refactoring for testability. V0 of Server Actions.
+
 ## 2.6.1
 
 ### Patch Changes
