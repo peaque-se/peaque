@@ -35,6 +35,8 @@ export type {
   HttpMethod,
   CookieOptions,
   CookieJar,
+  WebSocketHandler,
+  PeaqueWebSocket
 } from './http/http-types.js';
 
 export {

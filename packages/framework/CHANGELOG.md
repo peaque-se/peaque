@@ -1,5 +1,11 @@
 # @peaque/framework
 
+## 2.8.2
+
+### Patch Changes
+
+- Added missing export
+
 ## 2.8.1
 
 ### Patch Changes

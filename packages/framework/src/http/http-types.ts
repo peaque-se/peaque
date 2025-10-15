@@ -76,15 +76,6 @@ export interface PeaqueWebSocket {
   isOpen(): boolean
 }
 
-export interface PeaqueWebSocketConnection {
-  socket: PeaqueWebSocket
-  path: string
-  parameters: Record<string, string>
-  query: Record<string, string | string[]>
-  headers: Record<string, string | string[]>
-  remoteAddress: string
-}
-
 export type WebSocketHandler = {
   onMessage?: (message: string | Buffer, ws: PeaqueWebSocket) => void
   onClose?: (code: number, reason: string, ws: PeaqueWebSocket) => void
