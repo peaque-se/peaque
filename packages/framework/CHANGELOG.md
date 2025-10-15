@@ -1,5 +1,11 @@
 # @peaque/framework
 
+## 2.8.1
+
+### Patch Changes
+
+- Fixed path resolution when cwd is not the project dir.
+
 ## 2.8.0
 
 ### Minor Changes

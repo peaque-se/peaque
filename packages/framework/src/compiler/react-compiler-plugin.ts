@@ -5,6 +5,8 @@
 import { Plugin } from "esbuild"
 import { transformSync } from "@babel/core"
 import reactCompiler from "babel-plugin-react-compiler"
+// @ts-ignore - No types available for @babel/preset-typescript
+import presetTypescript from "@babel/preset-typescript"
 import { realFileSystem } from "../filesystem/index.js"
 
 interface ReactCompilerOptions {
@@ -47,7 +49,7 @@ export function reactCompilerPlugin(options: ReactCompilerOptions = {}): Plugin 
           const result = transformSync(contents, {
             filename: args.path,
             presets: [
-              ["@babel/preset-typescript", { isTSX: true, allExtensions: true }],
+              [presetTypescript, { isTSX: true, allExtensions: true }],
             ],
             plugins: [
               [
