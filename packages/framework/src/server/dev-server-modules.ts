@@ -7,6 +7,7 @@ import type { ModuleLoader } from "../hmr/module-loader.js"
 import { FileCache } from "./file-cache.js"
 import * as superjson from "superjson"
 import { type FileSystem, realFileSystem } from "../filesystem/index.js"
+import { checkCsrfProtection } from "../http/csrf-protection-helpers.js"
 
 export interface ModuleContext {
   basePath: string
@@ -59,6 +60,12 @@ export async function serveSourceModule(req: PeaqueRequest, context: ModuleConte
 }
 
 export async function handleRpcRequest(req: PeaqueRequest, context: ModuleContext): Promise<void> {
+  // Apply CSRF protection to RPC requests (server actions)
+  if (!checkCsrfProtection(req)) {
+    req.code(403).send({ error: "Forbidden: Cross-origin request rejected" })
+    return
+  }
+
   const rpcPath = req.path().substring(11) // remove /api/__rpc/
   const delimiter = rpcPath.lastIndexOf("/")
   const moduleName = rpcPath.substring(0, delimiter)

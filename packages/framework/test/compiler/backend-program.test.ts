@@ -149,7 +149,7 @@ describe("generateBackendServerCode", () => {
     expect(source).toContain("// Ensure startup module is loaded for side effects")
     expect(source).toContain("StartupModule;")
     expect(source).toContain("const handler = async (req) => { await executeMiddlewareChain(req, [AbsoluteRootMiddleware], router.getRequestHandler()) }")
-    expect(source).toContain('router.addRoute("POST", "/api/__rpc/0/greet", async (req) => { req.send(superjson.stringify(await ServerShim_0.greet(...(superjson.parse(req.rawBody().toString()).args))))})')
+    expect(source).toContain('router.addRoute("POST", "/api/__rpc/0/greet", async (req) => { if (!checkCsrfProtection(req)) { req.code(403).send({ error: "Forbidden: Cross-origin request rejected" }); return; } req.send(superjson.stringify(await ServerShim_0.greet(...(superjson.parse(req.rawBody().toString()).args))))})')
 
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })

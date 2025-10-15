@@ -65,6 +65,7 @@ export function generateBackendServerCode(
   file.addNamedImport("@peaque/framework/server", "HttpServer")
   file.addNamedImport("@peaque/framework/server", "addAssetRoutesForFolder")
   file.addNamedImport("@peaque/framework/server", "executeMiddlewareChain")
+  file.addNamedImport("@peaque/framework/server", "checkCsrfProtection")
   file.addDefaultImport("path", "path")
 
   for (const [stackKey, { html }] of headStacks) {
@@ -167,7 +168,7 @@ export function generateBackendServerCode(
       file.addNamespaceImport(`./${relativePath}`, alias)
       for (const func of shim.exportedFunctions) {
         routerBuilder.line(
-          `router.addRoute("POST", "/api/__rpc/${i}/${func.name}", async (req) => { req.send(superjson.stringify(await ${alias}.${func.name}(...(superjson.parse(req.rawBody().toString()).args))))})`,
+          `router.addRoute("POST", "/api/__rpc/${i}/${func.name}", async (req) => { if (!checkCsrfProtection(req)) { req.code(403).send({ error: "Forbidden: Cross-origin request rejected" }); return; } req.send(superjson.stringify(await ${alias}.${func.name}(...(superjson.parse(req.rawBody().toString()).args))))})`,
         )
       }
     }

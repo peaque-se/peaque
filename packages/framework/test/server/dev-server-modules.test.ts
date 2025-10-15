@@ -27,7 +27,9 @@ describe('dev-server-modules', () => {
       code: jest.fn().mockReturnThis(),
       send: jest.fn().mockReturnThis(),
       type: jest.fn().mockReturnThis(),
-      rawBody: jest.fn()
+      rawBody: jest.fn(),
+      method: jest.fn().mockReturnValue('POST'),
+      requestHeader: jest.fn()
     }
     const mockFileSystem = {
       existsSync: jest.fn(),
@@ -243,6 +245,37 @@ describe('dev-server-modules', () => {
 
       expect(mockReq.code).toHaveBeenCalledWith(404)
       expect(mockReq.send).toHaveBeenCalledWith('RPC handler not found')
+    })
+
+    test('should reject cross-site RPC requests', async () => {
+      mockReq.path.mockReturnValue('/api/__rpc/test/module/func')
+      mockReq.requestHeader.mockImplementation((name: string) => {
+        if (name === 'sec-fetch-site') return 'cross-site'
+        return undefined
+      })
+
+      await handleRpcRequest(mockReq, mockContext)
+
+      expect(mockReq.code).toHaveBeenCalledWith(403)
+      expect(mockReq.send).toHaveBeenCalledWith({ error: 'Forbidden: Cross-origin request rejected' })
+    })
+
+    test('should allow same-origin RPC requests', async () => {
+      mockReq.path.mockReturnValue('/api/__rpc/test/module/func')
+      mockReq.rawBody.mockReturnValue(Buffer.from('{"args":[1,2]}'))
+      mockReq.requestHeader.mockImplementation((name: string) => {
+        if (name === 'sec-fetch-site') return 'same-origin'
+        return undefined
+      })
+      const mockFunc = jest.fn().mockResolvedValue('result')
+      ;(mockContext.moduleCache.cacheByHash as jest.Mock).mockResolvedValue({ func: mockFunc })
+      mockSuperjson.parse.mockReturnValue({ args: [1, 2] })
+      mockSuperjson.stringify.mockReturnValue('["result"]')
+
+      await handleRpcRequest(mockReq, mockContext)
+
+      expect(mockFunc).toHaveBeenCalledWith(1, 2)
+      expect(mockReq.send).toHaveBeenCalledWith('["result"]')
     })
   })
 })
