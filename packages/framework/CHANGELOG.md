@@ -1,5 +1,11 @@
 # @peaque/framework
 
+## 2.8.0
+
+### Minor Changes
+
+- Added a version of automatic csrf protection.
+
 ## 2.7.0
 
 ### Minor Changes
