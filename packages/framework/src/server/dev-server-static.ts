@@ -44,7 +44,7 @@ if (typeof window !== 'undefined') {
     const ws = new WebSocket('ws://localhost:${port}/hmr');
     ws.onmessage = (event) => {
       const message = JSON.parse(event.data);
-      replaceStylesheet("/style.css")
+      replaceStylesheet("/peaque.css")
       const updatedFile = message.data.path
       let updatePath = "/@src/" + updatedFile + "?t=" + Date.now()
       if (updatedFile === "/peaque.js") {
