@@ -1,5 +1,11 @@
 # @peaque/framework
 
+## 2.9.0
+
+### Minor Changes
+
+- DX Improved - Multiple HMR issues resolved
+
 ## 2.8.2
 
 ### Patch Changes
