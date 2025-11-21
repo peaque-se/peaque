@@ -13,12 +13,11 @@ jest.mock("../../src/server/version.js", () => ({
   platformVersion: "1.0.0",
 }))
 
-jest.mock('chokidar', () => ({
+jest.mock('@parcel/watcher', () => ({
   default: {
-    watch: jest.fn().mockReturnValue({
-      on: jest.fn().mockReturnThis(),
-      close: jest.fn()
-    })
+    subscribe: jest.fn(() => Promise.resolve({
+      unsubscribe: jest.fn(() => Promise.resolve())
+    }))
   }
 }))
 
@@ -142,7 +141,7 @@ describe('DevServer Integration Tests', () => {
   describe('DevServer file watching', () => {
     test('should not watch if src directory does not exist', () => {
       const emptyFs = new MockFileSystem()
-      const chokidar = require('chokidar').default
+      const watcher = require('@parcel/watcher').default
 
       const devServer = new DevServer({
         basePath: '/empty',
@@ -152,7 +151,7 @@ describe('DevServer Integration Tests', () => {
       })
 
       // start() would trigger watch, but we're just testing constructor behavior
-      expect(chokidar.watch).not.toHaveBeenCalled()
+      expect(watcher.subscribe).not.toHaveBeenCalled()
     })
   })
 

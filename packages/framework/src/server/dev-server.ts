@@ -1,4 +1,4 @@
-import chokidar from "chokidar"
+import watcher from "@parcel/watcher"
 import { config } from "dotenv"
 import path from "path"
 import colors from "yoctocolors"
@@ -40,7 +40,7 @@ export class DevServer {
   private moduleCache: FileCache<any> = new FileCache()
   private moduleLoader: ModuleLoader
   private jobsRunner: JobsRunner
-  private watcher: chokidar.FSWatcher | undefined
+  private watcherSubscription: watcher.AsyncSubscription | undefined
   private handler: RequestHandler = this.requestHandler.bind(this)
   private readonly fileSystem: FileSystem
 
@@ -93,7 +93,7 @@ export class DevServer {
     try {
       await this.runStartup()
       this.jobsRunner.startOrUpdateJobs()
-      this.watchSourceFiles()
+      await this.watchSourceFiles()
       await this.server.startServer(this.port)
       // change window title to Peaque Framework - port
       process.stdout.write(`\x1b]0;🌍 Peaque Framework ${platformVersion}\x07`)
@@ -125,7 +125,7 @@ export class DevServer {
   async stop(reason?: string) {
     this.server.stop()
     this.jobsRunner.stop()
-    this.watcher?.close()
+    await this.watcherSubscription?.unsubscribe()
     console.log(`     ${colors.green("✓")} Peaque Framework ${platformVersion} server ${colors.red("stopped")} ${reason ? `(${colors.gray(reason)})` : ""}`)
     console.log(`     ${colors.green("✓")} Good bye! See you later!`)
   }
@@ -142,49 +142,53 @@ export class DevServer {
     })
   }
 
-  private watchSourceFiles() {
+  private async watchSourceFiles() {
     const srcDir = this.basePath + "/src"
     // Only watch if src directory exists
     if (!this.fileSystem.existsSync(srcDir)) {
       return
     }
-    // watch the src directory recursively for changes to .ts, .tsx, .js, .jsx files with chokidar
-    this.watcher = chokidar.watch(srcDir, {
-      cwd: this.basePath,
-      ignored: ["dist/**", "build/**", "node_modules/**", ".peaque/**", ".git/**", ".*/**"],
-      ignoreInitial: true,
-      persistent: true,
-    })
-
-    this.watcher.on("all", (event, changedPath) => {
-      // Normalize path separators to forward slashes for consistent matching
-      const normalizedPath = changedPath.replace(/\\/g, "/")
-
-      if (normalizedPath.startsWith("src/pages/")) {
-        // Only reload router for structural changes (add/unlink), not edits (change)
-        if (event === "add" || event === "unlink") {
-          this.frontendState = loadFrontendState(this.basePath, this.fileSystem)
-          notifyConnectedClients({ event: "change", path: "/peaque.js" }, changedPath)
+    // watch the src directory recursively for changes using @parcel/watcher
+    this.watcherSubscription = await watcher.subscribe(
+      srcDir,
+      (err, events) => {
+        if (err) {
+          console.error("Watcher error:", err)
           return
         }
-        // For changes to existing pages, fall through to component HMR
-      }
 
-      if (normalizedPath.startsWith("src/api/")) {
-        this.backendRouter = loadBackendRouter(this.basePath, this.fileSystem)
-        return
-      }
+        for (const event of events) {
+          // Get path relative to basePath and normalize separators
+          const relativePath = path.relative(this.basePath, event.path)
+          const normalizedPath = relativePath.replace(/\\/g, "/")
 
-      if (normalizedPath.startsWith("src/jobs/")) {
-        this.jobsRunner.startOrUpdateJobs()
-        return
-      }
+          if (normalizedPath.startsWith("src/pages/")) {
+            // Only reload router for structural changes (create/delete), not edits (update)
+            if (event.type === "create" || event.type === "delete") {
+              this.frontendState = loadFrontendState(this.basePath, this.fileSystem)
+              notifyConnectedClients({ event: "change", path: "/peaque.js" }, event.path)
+              continue
+            }
+            // For changes to existing pages, fall through to component HMR
+          }
 
-      if (normalizedPath.endsWith(".tsx")) {
-        notifyConnectedClients({ event, path: normalizedPath.replace(".tsx", "") }, normalizedPath)
-        return
+          if (normalizedPath.startsWith("src/api/")) {
+            this.backendRouter = loadBackendRouter(this.basePath, this.fileSystem)
+            continue
+          }
+
+          if (normalizedPath.startsWith("src/jobs/")) {
+            this.jobsRunner.startOrUpdateJobs()
+            continue
+          }
+
+          if (normalizedPath.endsWith(".tsx")) {
+            notifyConnectedClients({ event: event.type, path: normalizedPath.replace(".tsx", "") }, event.path)
+            continue
+          }
+        }
       }
-    })
+    )
   }
 
 

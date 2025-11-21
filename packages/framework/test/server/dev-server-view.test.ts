@@ -49,6 +49,7 @@ describe('dev-server-view', () => {
         strictMode: true,
         renderMode: "component",
         routerModule: "@peaque/framework",
+        enableRouterUpdate: true,
       })
       expect(mockFastRefreshify).toHaveBeenCalledWith(mockEntrySource, "peaque.tsx")
       expect(mockMakeImportsRelative).toHaveBeenCalledWith(mockRefreshified)
