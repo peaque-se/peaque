@@ -14,6 +14,11 @@ const listener = async () => {
 function init() {
   if (typeof window === "undefined") return
   window.addEventListener("popstate", listener)
+  window.addEventListener("peaque:routerUpdate", ((e: CustomEvent<RouteNode>) => {
+    if (e.detail === currentRoot.root) return
+    currentRoot.root = e.detail
+    listener()
+  }) as EventListener)
   listener()
 }
 init()
@@ -27,7 +32,8 @@ export type RouterResult = {
 }
 
 export function useRouterResult(root?: RouteNode): RouterResult {
-  if (root && root !== currentRoot.root) {
+  // Only accept initial setup from props, after that HMR controls updates
+  if (root && currentRoot.root === null) {
     currentRoot.root = root
     listener()
   }
@@ -127,3 +133,4 @@ function notifySubscribers() {
 function getSnapshot(): RouterResult {
   return currentRouterResult.current
 }
+

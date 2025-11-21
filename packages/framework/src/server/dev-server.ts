@@ -2,24 +2,24 @@ import chokidar from "chokidar"
 import { config } from "dotenv"
 import path from "path"
 import colors from "yoctocolors"
-import { setupImportAliases } from "../compiler/imports.js"
 import { setBaseDependencies } from "../compiler/bundle.js"
+import { setupImportAliases } from "../compiler/imports.js"
 import { setupSourceMaps } from "../exceptions/sourcemaps.js"
+import { type FileSystem, realFileSystem } from "../filesystem/index.js"
 import { hmrConnectHandler, notifyConnectedClients } from "../hmr/hmr-handler.js"
 import { ModuleLoader } from "../hmr/module-loader.js"
 import { executeMiddlewareChain } from "../http/http-router.js"
 import { HttpServer } from "../http/http-server.js"
 import { PeaqueRequest, RequestHandler } from "../http/http-types.js"
 import { JobsRunner } from "../jobs/jobs-runner.js"
+import type { RouteNode } from "../router/router.js"
+import { handleBackendApiRequest } from "./dev-server-api.js"
+import { handleRpcRequest, ModuleContext, serveSourceModule } from "./dev-server-modules.js"
+import { FrontendState, loadBackendRouter, loadFrontendState } from "./dev-server-state.js"
+import { servePeaqueCss, servePeaqueLoaderScript, servePeaqueMainHtml, servePeaqueMainScript, servePublicAsset } from "./dev-server-static.js"
+import { createDevRouterModule } from "./dev-server-view.js"
 import { FileCache } from "./file-cache.js"
 import { platformVersion } from "./version.js"
-import { loadBackendRouter, loadFrontendState, FrontendState } from "./dev-server-state.js"
-import { createDevRouterModule } from "./dev-server-view.js"
-import { handleBackendApiRequest } from "./dev-server-api.js"
-import { serveSourceModule, handleRpcRequest, ModuleContext } from "./dev-server-modules.js"
-import { servePeaqueCss, servePeaqueMainHtml, servePeaqueMainScript, servePeaqueLoaderScript, servePublicAsset } from "./dev-server-static.js"
-import type { RouteNode } from "../router/router.js"
-import { type FileSystem, realFileSystem } from "../filesystem/index.js"
 
 export interface DevServerOptions {
   basePath: string
@@ -157,24 +157,32 @@ export class DevServer {
     })
 
     this.watcher.on("all", (event, changedPath) => {
-      if (changedPath.endsWith(".tsx")) {
-        notifyConnectedClients({ event, path: changedPath.replace(".tsx", "") }, changedPath)
-        return
+      // Normalize path separators to forward slashes for consistent matching
+      const normalizedPath = changedPath.replace(/\\/g, "/")
+
+      if (normalizedPath.startsWith("src/pages/")) {
+        // Only reload router for structural changes (add/unlink), not edits (change)
+        if (event === "add" || event === "unlink") {
+          this.frontendState = loadFrontendState(this.basePath, this.fileSystem)
+          notifyConnectedClients({ event: "change", path: "/peaque.js" }, changedPath)
+          return
+        }
+        // For changes to existing pages, fall through to component HMR
       }
 
-      if (changedPath.startsWith("src/pages/")) {
-        this.frontendState = loadFrontendState(this.basePath, this.fileSystem)
-        notifyConnectedClients({ event, path: "/peaque.js" }, "<main router>")
-        return
-      }
-
-      if (changedPath.startsWith("src/api/")) {
+      if (normalizedPath.startsWith("src/api/")) {
         this.backendRouter = loadBackendRouter(this.basePath, this.fileSystem)
         return
       }
 
-      if (changedPath.startsWith("src/jobs/")) {
+      if (normalizedPath.startsWith("src/jobs/")) {
         this.jobsRunner.startOrUpdateJobs()
+        return
+      }
+
+      if (normalizedPath.endsWith(".tsx")) {
+        notifyConnectedClients({ event, path: normalizedPath.replace(".tsx", "") }, normalizedPath)
+        return
       }
     })
   }

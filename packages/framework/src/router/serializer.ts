@@ -22,6 +22,8 @@ export function serializeRouterToJs(root: RouteNode, namesAndStacksAreComponentN
         parts.push(`\n${childIndent}  [${serializedKey}, ${serializeNode(child, childIndent + "  ")}],`)
       }
       parts.push(`\n${childIndent}]),`)
+    } else {
+      parts.push(`\n${childIndent}staticChildren: new Map(),`)
     }
     if ((node as any).paramName) {
       parts.push(`\n${childIndent}paramName: "${(node as any).paramName}",`)

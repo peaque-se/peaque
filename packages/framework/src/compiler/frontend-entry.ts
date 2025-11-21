@@ -12,6 +12,7 @@ export interface FrontendEntryOptions {
   renderMode: FrontendRenderMode
   routerModule?: string
   rootElementId?: string
+  enableRouterUpdate?: boolean
 }
 
 export function buildFrontendEntryModule({
@@ -23,6 +24,7 @@ export function buildFrontendEntryModule({
   renderMode,
   routerModule = "@peaque/framework",
   rootElementId = "peaque",
+  enableRouterUpdate = false,
 }: FrontendEntryOptions): string {
   const file = new CodeFile()
 
@@ -74,6 +76,16 @@ export function buildFrontendEntryModule({
   body.line("}")
 
   body.blankLine()
+
+  if (enableRouterUpdate) {
+    // Dispatch router update event for HMR
+    body.line("if (typeof window !== 'undefined') {")
+    body.indented(builder => {
+      builder.line("window.dispatchEvent(new CustomEvent('peaque:routerUpdate', { detail: router }))")
+    })
+    body.line("}")
+    body.blankLine()
+  }
 
   if (renderMode === "component") {
     body.line("export default function() {")

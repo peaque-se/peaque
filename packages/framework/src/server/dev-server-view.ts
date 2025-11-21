@@ -14,6 +14,7 @@ export function createDevRouterModule(state: FrontendState, strictMode: boolean)
     strictMode,
     renderMode: "component",
     routerModule: "@peaque/framework",
+    enableRouterUpdate: true,
   })
   const refreshified = fastRefreshify(entrySource, "peaque.tsx")
   return makeImportsRelative(refreshified)
