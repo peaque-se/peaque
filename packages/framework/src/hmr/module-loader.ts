@@ -1,8 +1,9 @@
-import path from 'node:path'
-import { pathToFileURL, fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
+import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { registerSourceMap } from '../exceptions/sourcemaps.js'
 import { type FileSystem, realFileSystem } from '../filesystem/index.js'
+import { perfLogger } from '../server/perf-logger.js'
 
 type ModuleLoaderOptions = {
   absWorkingDir?: string
@@ -82,6 +83,7 @@ export class ModuleLoader {
 
     let buildContext = this.buildContexts.get(entryPath)
     if (!buildContext) {
+      const ctxKey = perfLogger.start("Create esbuild context", { entry: path.relative(absWorkingDir, entryPath) })
       await this.fileSystem.mkdir(path.dirname(outFile), { recursive: true })
       const ctx = await esbuild.context({
         entryPoints: [entryPath],
@@ -103,12 +105,17 @@ export class ModuleLoader {
       })
       buildContext = { ctx, outfile: outFile }
       this.buildContexts.set(entryPath, buildContext)
+      perfLogger.end(ctxKey)
     }
 
     if (!buildContext.buildPromise) {
       buildContext.buildPromise = buildContext.ctx.rebuild()
     }
+
+    const buildKey = perfLogger.start("esbuild rebuild", { module: modulePath })
     const buildResult = await buildContext.buildPromise
+    perfLogger.end(buildKey)
+
     buildContext.buildPromise = undefined
 
     if (buildResult.errors?.length) {

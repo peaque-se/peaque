@@ -11,6 +11,7 @@ import { fileURLToPath } from "url"
 import { CodeBuilder, CodeFile } from "../codegen/index.js"
 import { makeImportsRelative } from "./imports.js"
 import { type FileSystem, realFileSystem } from "../filesystem/index.js"
+import { perfLogger } from "../server/perf-logger.js"
 
 const bundleFilename = fileURLToPath(import.meta.url)
 const frameworkRequire = createRequire(bundleFilename)
@@ -53,9 +54,12 @@ const dependencies: string[] = []
 /// Finally, we convert any remaining require calls to imports for react and scheduler (TODO: generalize this)
 async function bundleCommonJSModule(moduleName: string, pkgJson: PackageJson, basePath: string): Promise<string> {
   const moduleBaseName = moduleName.split("/")[0]
+
+  const requireKey = perfLogger.start("Require CJS module", { module: moduleName })
   const require = createRequire("file://" + path.join(basePath, "noop.js").replace(/\\/g, "/"))
   const mod = require(moduleName)
   const keys = Object.keys(mod)
+  perfLogger.end(requireKey)
 
   const file = new CodeFile()
   file.addDefaultImport(moduleName, "cjs")
@@ -66,6 +70,7 @@ async function bundleCommonJSModule(moduleName: string, pkgJson: PackageJson, ba
 
   const code = file.toString()
 
+  const bundleKey = perfLogger.start("Bundle CJS to ESM", { module: moduleName })
   const result = await esbuild.build({
     stdin: {
       contents: code,
@@ -81,6 +86,8 @@ async function bundleCommonJSModule(moduleName: string, pkgJson: PackageJson, ba
     define: { "process.env.NODE_ENV": '"development"' },
     external: dependencies.filter((d) => d !== moduleBaseName),
   })
+  perfLogger.end(bundleKey)
+
   return makeImportsRelative(convertRequiresToImports(result.outputFiles[0].text))
 }
 
@@ -134,6 +141,8 @@ export async function bundleESMModule(moduleName: string, moduleBaseName: string
   const file = new CodeFile()
   file.body.line(`export * from ${JSON.stringify(moduleName)};`)
   const code = file.toString()
+
+  const bundleKey = perfLogger.start("Bundle ESM module", { module: moduleName })
   const result = await esbuild.build({
     stdin: {
       contents: code,
@@ -149,6 +158,8 @@ export async function bundleESMModule(moduleName: string, moduleBaseName: string
     define: { "process.env.NODE_ENV": '"development"' },
     external: dependencies.filter((d) => d !== moduleBaseName && d !== moduleName),
   })
+  perfLogger.end(bundleKey)
+
   return makeImportsRelative(convertRequiresToImports(result.outputFiles[0].text))
 }
 

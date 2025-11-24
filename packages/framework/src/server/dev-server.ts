@@ -19,6 +19,7 @@ import { FrontendState, loadBackendRouter, loadFrontendState } from "./dev-serve
 import { servePeaqueCss, servePeaqueLoaderScript, servePeaqueMainHtml, servePeaqueMainScript, servePublicAsset } from "./dev-server-static.js"
 import { createDevRouterModule } from "./dev-server-view.js"
 import { FileCache } from "./file-cache.js"
+import { perfLogger } from "./perf-logger.js"
 import { platformVersion } from "./version.js"
 
 export interface DevServerOptions {
@@ -87,6 +88,12 @@ export class DevServer {
 
     config({ path: path.join(basePath, ".env"), override: true }) // re-load .env variables on each rebuild
     config({ path: path.join(basePath, ".env.local"), override: true }) // re-load .env variables on each rebuild
+
+    // Enable performance logging if set in .env file
+    if (process.env.PEAQUE_PERF_LOG === "true") {
+      perfLogger.setEnabled(true)
+      console.log(colors.gray(`[PERF] Threshold: ${perfLogger['threshold']}ms`))
+    }
   }
 
   async start() {
@@ -131,15 +138,22 @@ export class DevServer {
   }
 
   private async requestHandler(req: PeaqueRequest) {
-    await handleDevServerRequest(req, {
-      basePath: this.basePath,
-      port: this.port,
-      noStrict: this.noStrict,
-      frontendState: this.frontendState,
-      backendRouter: this.backendRouter,
-      moduleContext: this.moduleContext(),
-      fileSystem: this.fileSystem,
-    })
+    const requestStart = performance.now()
+
+    try {
+      await handleDevServerRequest(req, {
+        basePath: this.basePath,
+        port: this.port,
+        noStrict: this.noStrict,
+        frontendState: this.frontendState,
+        backendRouter: this.backendRouter,
+        moduleContext: this.moduleContext(),
+        fileSystem: this.fileSystem,
+      })
+    } finally {
+      const duration = performance.now() - requestStart
+      perfLogger.logRequest(req.method(), req.path(), duration, req.responseCode() || 200)
+    }
   }
 
   private async watchSourceFiles() {
