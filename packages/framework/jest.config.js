@@ -7,6 +7,8 @@ export default {
     '^../../src/compiler/tailwind-bundler.js$': '<rootDir>/test/__mocks__/tailwind-bundler.js',
     '^../compiler/tailwind-bundler.js$': '<rootDir>/test/__mocks__/tailwind-bundler.js',
     '^superjson$': '<rootDir>/test/__mocks__/superjson.js',
+    '^oxc-parser$': '<rootDir>/test/__mocks__/oxc-parser.js',
+    '^yoctocolors$': '<rootDir>/test/__mocks__/yoctocolors.js',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   testEnvironment: 'node',
@@ -28,7 +30,7 @@ export default {
     }]
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(yoctocolors)/)'
+    'node_modules/'
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'json']
 };
