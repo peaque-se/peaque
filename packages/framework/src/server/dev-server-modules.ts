@@ -1,18 +1,22 @@
+import { createHash } from "crypto"
 import path from "path"
+import * as superjson from "superjson"
 import { fastRefreshify } from "../compiler/fast-refreshify.js"
 import { makeImportsRelative } from "../compiler/imports.js"
-import { makeRpcShim } from "./make-rpc.js"
-import type { PeaqueRequest } from "../http/http-types.js"
-import type { ModuleLoader } from "../hmr/module-loader.js"
-import { FileCache } from "./file-cache.js"
-import * as superjson from "superjson"
 import { type FileSystem, realFileSystem } from "../filesystem/index.js"
+import type { ModuleLoader } from "../hmr/module-loader.js"
 import { checkCsrfProtection } from "../http/csrf-protection-helpers.js"
+import type { PeaqueRequest } from "../http/http-types.js"
+import { DiskCache } from "./disk-cache.js"
+import { FileCache } from "./file-cache.js"
+import { makeRpcShim } from "./make-rpc.js"
+import { perfLogger } from "./perf-logger.js"
 
 export interface ModuleContext {
   basePath: string
   moduleLoader: ModuleLoader
   moduleCache: FileCache<any>
+  rpcShimCache: DiskCache
   fileSystem?: FileSystem
 }
 
@@ -42,7 +46,19 @@ export async function serveSourceModule(req: PeaqueRequest, context: ModuleConte
     const fileContents = fileSystem.readFileSync(fullPath, "utf-8") as string
     if (fileContents.startsWith("'use server'") || fileContents.startsWith('"use server"')) {
       const relative = fullPath.substring(context.basePath.length + 1).replace(/\\/g, "/")
-      const { shim } = await makeRpcShim(fileContents, relative)
+
+      // Hash file contents for cache validation
+      const hash = createHash("sha1").update(fileContents).digest("hex")
+
+      // Cache RPC shim generation by file hash to avoid expensive parsing
+      // Uses persistent disk cache that survives dev server restarts
+      const shim = await context.rpcShimCache.cacheByHash(relative, hash, async () => {
+        const shimKey = perfLogger.start("Generate RPC shim", { file: relative })
+        const { shim } = await makeRpcShim(fileContents, relative)
+        perfLogger.end(shimKey)
+        return shim
+      })
+
       const processed = makeImportsRelative(shim, relative)
       req.type("application/javascript").send(processed)
       return

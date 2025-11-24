@@ -18,6 +18,7 @@ import { handleRpcRequest, ModuleContext, serveSourceModule } from "./dev-server
 import { FrontendState, loadBackendRouter, loadFrontendState } from "./dev-server-state.js"
 import { servePeaqueCss, servePeaqueLoaderScript, servePeaqueMainHtml, servePeaqueMainScript, servePublicAsset } from "./dev-server-static.js"
 import { createDevRouterModule } from "./dev-server-view.js"
+import { DiskCache } from "./disk-cache.js"
 import { FileCache } from "./file-cache.js"
 import { perfLogger } from "./perf-logger.js"
 import { platformVersion } from "./version.js"
@@ -39,6 +40,7 @@ export class DevServer {
   private frontendState: FrontendState
   private backendRouter: RouteNode<string>
   private moduleCache: FileCache<any> = new FileCache()
+  private rpcShimCache: DiskCache
   private moduleLoader: ModuleLoader
   private jobsRunner: JobsRunner
   private watcherSubscription: watcher.AsyncSubscription | undefined
@@ -53,6 +55,9 @@ export class DevServer {
     this.fileSystem = fileSystem
     this.moduleLoader = new ModuleLoader({ absWorkingDir: basePath, fileSystem: this.fileSystem })
     this.jobsRunner = new JobsRunner(basePath, this.fileSystem)
+
+    const cacheDir = path.join(basePath, "node_modules", ".cache", "peaque", "rpc")
+    this.rpcShimCache = new DiskCache(cacheDir, "1.0", this.fileSystem)
 
     this.frontendState = loadFrontendState(this.basePath, this.fileSystem)
     this.backendRouter = loadBackendRouter(this.basePath, this.fileSystem)
@@ -212,6 +217,7 @@ export class DevServer {
       basePath: this.basePath,
       moduleLoader: this.moduleLoader,
       moduleCache: this.moduleCache,
+      rpcShimCache: this.rpcShimCache,
       fileSystem: this.fileSystem,
     }
   }

@@ -39,6 +39,9 @@ describe('dev-server-modules', () => {
     const mockFileCache = {
       cacheByHash: jest.fn()
     }
+    const mockRpcShimCache = {
+      cacheByHash: jest.fn((key: string, hash: string, fn: () => Promise<any>) => fn())
+    }
     const mockModuleLoader = {
       loadModule: jest.fn()
     }
@@ -46,6 +49,7 @@ describe('dev-server-modules', () => {
       basePath: 'c:\\test\\path',
       moduleLoader: mockModuleLoader as any,
       moduleCache: mockFileCache as any,
+      rpcShimCache: mockRpcShimCache as any,
       fileSystem: mockFileSystem
     }
   })

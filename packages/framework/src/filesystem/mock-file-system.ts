@@ -85,10 +85,20 @@ export class MockFileSystem implements FileSystem {
     return {
       isDirectory: () => entry.type === 'directory',
       isFile: () => entry.type === 'file',
+      isSymbolicLink: () => false, // MockFileSystem doesn't support symlinks
       mtime: new Date(entry.mtime),
       atime: new Date(entry.atime),
       size: entry.type === 'file' ? entry.content.byteLength : this.getDirectoryEntry(targetPath).children.size,
     }
+  }
+
+  async lstat(targetPath: string): Promise<FileStat> {
+    return this.lstatSync(targetPath)
+  }
+
+  lstatSync(targetPath: string): FileStat {
+    // MockFileSystem doesn't support symlinks, so lstat is the same as stat
+    return this.statSync(targetPath)
   }
 
   async readFile(targetPath: string): Promise<Buffer> {

@@ -4,14 +4,15 @@
 /// Converts require calls to import statements for compatibility
 /// © Peaque Developers 2025
 
-import path from "path"
 import * as esbuild from "esbuild"
 import { createRequire } from "module"
+import path from "path"
 import { fileURLToPath } from "url"
 import { CodeBuilder, CodeFile } from "../codegen/index.js"
-import { makeImportsRelative } from "./imports.js"
 import { type FileSystem, realFileSystem } from "../filesystem/index.js"
+import { DiskCache, hashModuleVersion } from "../server/disk-cache.js"
 import { perfLogger } from "../server/perf-logger.js"
+import { makeImportsRelative } from "./imports.js"
 
 const bundleFilename = fileURLToPath(import.meta.url)
 const frameworkRequire = createRequire(bundleFilename)
@@ -43,6 +44,7 @@ function isESMModule(pkgJson: PackageJson): boolean {
 }
 
 const dependencies: string[] = []
+let dependencyBundleCache: DiskCache | null = null
 
 /// Bundles a CommonJS module into an ES module using esbuild
 /// This is a bit tricky because we need to handle the exports correctly
@@ -133,6 +135,16 @@ function convertRequiresToImports(bundledCode: string): string {
   return builder.toString()
 }
 
+/// Helper function to bundle a module based on its type (ESM or CommonJS)
+async function bundleModuleByType(moduleName: string, moduleBaseName: string, pkgJson: PackageJson, basePath: string): Promise<string> {
+  const isESM = isESMModule(pkgJson)
+  if (!isESM) {
+    return await bundleCommonJSModule(moduleName, pkgJson, basePath)
+  } else {
+    return await bundleESMModule(moduleName, moduleBaseName, pkgJson, basePath)
+  }
+}
+
 /// Bundles an ESM module using esbuild
 /// This is simpler than the CJS case because we can just re-export everything
 /// and let esbuild handle the tree-shaking and bundling.
@@ -203,6 +215,11 @@ export function setBaseDependencies(basePath: string, fileSystem: FileSystem = r
   } else {
     console.warn(`Warning: Could not find @peaque/framework package.json in ${frameworkPkgPath}. Make sure @peaque/framework is installed.`)
   }
+
+  // Initialize persistent disk cache for dependency bundles
+  // Version: increment when bundle format changes
+  const cacheDir = path.join(basePath, "node_modules", ".cache", "peaque", "deps")
+  dependencyBundleCache = new DiskCache(cacheDir, "1.0", fileSystem)
 }
 
 // Bundles a module from node_modules, handling both CommonJS and ESM modules
@@ -238,11 +255,22 @@ export async function bundleModuleFromNodeModules(
   const pkgJsonPath = path.join(basePath, "node_modules", moduleBaseName, "package.json")
   const pkgJson = JSON.parse(fileSystem.readFileSync(pkgJsonPath, "utf-8") as string) as PackageJson
 
-  const isESM = isESMModule(pkgJson)
+  if (!dependencyBundleCache)
+    throw new Error("dependencyBundleCache not initialized. Call setBaseDependencies() first.")
 
-  if (!isESM) {
-    return await bundleCommonJSModule(moduleName, pkgJson, basePath)
+  const modulePath = path.join(basePath, "node_modules", moduleBaseName)
+
+  const moduleStats = fileSystem.lstatSync(modulePath)
+  if (moduleStats.isSymbolicLink()) {
+    // For npm linked modules, bypass cache
+    return await bundleModuleByType(moduleName, moduleBaseName, pkgJson, basePath)
   } else {
-    return await bundleESMModule(moduleName, moduleBaseName, pkgJson, basePath)
+    // For regular modules, use version-based hash for persistent caching
+    const version = pkgJson.version || "0.0.0"
+    const hash = hashModuleVersion(moduleName, version)
+
+    return await dependencyBundleCache.cacheByHash(moduleName, hash, async () => {
+      return await bundleModuleByType(moduleName, moduleBaseName, pkgJson, basePath)
+    })
   }
 }

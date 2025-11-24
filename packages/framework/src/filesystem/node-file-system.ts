@@ -32,6 +32,16 @@ export class NodeFileSystem implements FileSystem {
     return this.toFileStat(stats)
   }
 
+  async lstat(target: string): Promise<FileStat> {
+    const stats = await fsp.lstat(target)
+    return this.toFileStat(stats)
+  }
+
+  lstatSync(target: string): FileStat {
+    const stats = fs.lstatSync(target)
+    return this.toFileStat(stats)
+  }
+
   async readFile(target: string): Promise<Buffer> {
     return fsp.readFile(target)
   }
@@ -111,6 +121,7 @@ export class NodeFileSystem implements FileSystem {
     return {
       isDirectory: () => stats.isDirectory(),
       isFile: () => stats.isFile(),
+      isSymbolicLink: () => stats.isSymbolicLink(),
       mtime: stats.mtime,
       atime: stats.atime,
       size: stats.size,

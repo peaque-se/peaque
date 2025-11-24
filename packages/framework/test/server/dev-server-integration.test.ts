@@ -69,6 +69,7 @@ describe('DevServer Integration Tests', () => {
         basePath,
         moduleLoader: expect.any(Object),
         moduleCache: expect.any(Object),
+        rpcShimCache: expect.any(Object),
         fileSystem: mockFileSystem
       })
     })
@@ -106,7 +107,7 @@ describe('DevServer Integration Tests', () => {
     test('should handle invalid tsconfig.json gracefully', () => {
       mockFileSystem.writeFileSync(`${basePath}/tsconfig.json`, 'invalid json {')
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation()
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
 
       const devServer = new DevServer({
         basePath,
@@ -170,6 +171,7 @@ describe('DevServer Integration Tests', () => {
         basePath,
         moduleLoader: expect.any(Object),
         moduleCache: expect.any(Object),
+        rpcShimCache: expect.any(Object),
         fileSystem: mockFileSystem
       })
     })

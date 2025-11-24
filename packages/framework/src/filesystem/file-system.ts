@@ -1,6 +1,7 @@
 export interface FileStat {
   isDirectory(): boolean
   isFile(): boolean
+  isSymbolicLink(): boolean
   mtime: Date
   atime: Date
   size: number
@@ -20,6 +21,8 @@ export interface FileSystem {
   readdirEntriesSync(path: string): DirectoryEntry[]
   stat(path: string): Promise<FileStat>
   statSync(path: string): FileStat
+  lstat(path: string): Promise<FileStat>
+  lstatSync(path: string): FileStat
   readFile(path: string): Promise<Buffer>
   readFileText(path: string, encoding: BufferEncoding): Promise<string>
   readFileSync(path: string, encoding?: BufferEncoding): string | Buffer
