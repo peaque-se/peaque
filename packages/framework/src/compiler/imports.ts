@@ -1,11 +1,14 @@
 /// Manages import path aliases and rewrites import paths to be compatible with the Peaque environment
 /// © Peaque Developers 2025
-import path from "path"
+import { builtinModules } from "module";
+import path from "path";
 
 let globalImportAliases: Record<string, string> = {};
 
+const NODE_BUILTINS = new Set(builtinModules);
+
 /// Sets up import path aliases based on the provided tsconfig.json
-export function setupImportAliases(tsconfigJson:any) {
+export function setupImportAliases(tsconfigJson: any) {
   const paths = tsconfigJson?.compilerOptions?.paths;
   if (!paths) return {};
   const aliases: Record<string, string> = {};
@@ -28,6 +31,13 @@ export function makeImportsRelative(fileContents: string, includingPath: string 
   function resolvePath(importPath: string): string {
     // Already resolved paths
     if (importPath.startsWith("/@deps/") || importPath.startsWith("/@src/")) {
+      return importPath;
+    }
+
+    // Node.js built-ins should not be rewritten
+    // Leave them as-is so dynamic imports fail gracefully in browser
+    // Also skip node: prefixed imports (e.g., "node:fs")
+    if (NODE_BUILTINS.has(importPath) || importPath.startsWith("node:")) {
       return importPath;
     }
 

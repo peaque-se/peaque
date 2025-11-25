@@ -1,8 +1,6 @@
 import * as esbuild from "esbuild"
 import { OnResolveArgs, OnResolveResult, Plugin, PluginBuild } from "esbuild"
-import { createRequire } from "module"
-import path from "path"
-import { fileURLToPath } from "url"
+import { builtinModules, createRequire } from "module"
 export interface BackendBundleOptions {
   /** The input TypeScript content as a string */
   inputContent: string
@@ -41,7 +39,7 @@ export function frameworkDepsPlugin(deps: string[]): Plugin {
           try {
             const resolved = frameworkResolve(args.path)
             return { path: resolved }
-          } catch(e) {
+          } catch (e) {
             console.warn("Failed to resolve framework dependency:", args.path, e instanceof Error ? e.message : e)
             return null
           }
@@ -95,32 +93,9 @@ export async function bundleBackendProgram(options: BackendBundleOptions): Promi
       outfile: outfile,
       minify: minify,
       sourcemap: sourcemap,
-      // Externalize Node.js built-ins, common packages, and route files
+      // Externalize Node.js built-ins using the official list
       external: [
-        "fs",
-        "path",
-        "http",
-        "https",
-        "url",
-        "querystring",
-        "crypto",
-        "util",
-        "stream",
-        "zlib",
-        "events",
-        "os",
-        "child_process",
-        "cluster",
-        "worker_threads",
-        "buffer",
-        "assert",
-        "constants",
-        "timers",
-        "dns",
-        "net",
-        "tls",
-        "v8",
-        "vm",
+        ...builtinModules,
         // "@prisma",
         // "esbuild"
       ],

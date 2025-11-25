@@ -5,7 +5,7 @@
 /// © Peaque Developers 2025
 
 import * as esbuild from "esbuild"
-import { createRequire } from "module"
+import { builtinModules, createRequire } from "module"
 import path from "path"
 import { fileURLToPath } from "url"
 import { CodeBuilder, CodeFile } from "../codegen/index.js"
@@ -86,7 +86,7 @@ async function bundleCommonJSModule(moduleName: string, pkgJson: PackageJson, ba
     platform: "browser",
     splitting: false,
     define: { "process.env.NODE_ENV": '"development"' },
-    external: dependencies.filter((d) => d !== moduleBaseName),
+    external: [...dependencies.filter((d) => d !== moduleBaseName), ...builtinModules],
   })
   perfLogger.end(bundleKey)
 
@@ -95,13 +95,22 @@ async function bundleCommonJSModule(moduleName: string, pkgJson: PackageJson, ba
 
 /// Converts require(XXX) calls to import statements and inject a fake require function
 /// This is a bit of a hack and only works for simple cases
+/// Skips Node.js built-ins which should fail naturally in the browser
 /// TODO: use a proper parser to handle all cases
 function convertRequiresToImports(bundledCode: string): string {
   const addedImports = new Set<string>()
 
   for (const match of bundledCode.matchAll(/require\(([^)]+)\)/g)) {
     const requirePath: string = match[1]
-    const importName = `__pq__${requirePath.replace(/["']/g, "").trim()}`
+    const cleanPath = requirePath.replace(/["']/g, "").trim()
+
+    // Skip Node.js built-ins - leave require() calls as-is so they fail naturally
+    // Also skip node: prefixed imports (e.g., "node:fs")
+    if (builtinModules.includes(cleanPath) || cleanPath.startsWith("node:")) {
+      continue
+    }
+
+    const importName = `__pq__${cleanPath}`
     const importLine = `import * as ${importName} from ${requirePath};`
     addedImports.add(importLine)
   }
@@ -175,7 +184,7 @@ export async function bundleESMModule(moduleName: string, moduleBaseName: string
     platform: "browser",
     splitting: false,
     define: { "process.env.NODE_ENV": '"development"' },
-    external: dependencies.filter((d) => d !== moduleBaseName && d !== moduleName),
+    external: [...dependencies.filter((d) => d !== moduleBaseName && d !== moduleName), ...builtinModules],
     // Suppress warning about accessing mod.default when it might not exist
     // This is intentional - we check for undefined and provide a fallback
     logOverride: { "import-is-undefined": "silent" },
@@ -229,7 +238,7 @@ export function setBaseDependencies(basePath: string, fileSystem: FileSystem = r
   // Initialize persistent disk cache for dependency bundles
   // Version: increment when bundle format changes
   const cacheDir = path.join(basePath, "node_modules", ".cache", "peaque", "deps")
-  dependencyBundleCache = new DiskCache(cacheDir, "1.0", fileSystem)
+  dependencyBundleCache = new DiskCache(cacheDir, "1.1", fileSystem)
 }
 
 // Bundles a module from node_modules, handling both CommonJS and ESM modules
