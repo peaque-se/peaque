@@ -151,7 +151,14 @@ async function bundleModuleByType(moduleName: string, moduleBaseName: string, pk
 /// We still need to mark dependencies as external to avoid bundling them.
 export async function bundleESMModule(moduleName: string, moduleBaseName: string, pkgJson: PackageJson, basePath: string): Promise<string> {
   const file = new CodeFile()
+  // Import as namespace to access all exports
+  file.addNamespaceImport(moduleName, "mod")
+  // Re-export all named exports
   file.body.line(`export * from ${JSON.stringify(moduleName)};`)
+  // Re-export default if it exists, otherwise export the namespace
+  // This handles both modules with default exports and without
+  file.body.line(`export default mod.default ?? mod;`)
+
   const code = file.toString()
 
   const bundleKey = perfLogger.start("Bundle ESM module", { module: moduleName })
@@ -169,6 +176,9 @@ export async function bundleESMModule(moduleName: string, moduleBaseName: string
     splitting: false,
     define: { "process.env.NODE_ENV": '"development"' },
     external: dependencies.filter((d) => d !== moduleBaseName && d !== moduleName),
+    // Suppress warning about accessing mod.default when it might not exist
+    // This is intentional - we check for undefined and provide a fallback
+    logOverride: { "import-is-undefined": "silent" },
   })
   perfLogger.end(bundleKey)
 
