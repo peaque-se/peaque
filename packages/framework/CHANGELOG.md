@@ -1,5 +1,11 @@
 # @peaque/framework
 
+## 2.10.0
+
+### Minor Changes
+
+- Performance improvements with caching
+
 ## 2.9.0
 
 ### Minor Changes
